@@ -81,7 +81,10 @@ export function SignupForm({
             ? parseInt(selectedNumber, 10)
             : null;
 
-      const result = await signupParticipant(name, phoneNumber, selectedNum);
+      // Prepend +234 to the phone number
+      const fullPhoneNumber = `+234${phoneNumber.replace(/\s/g, '')}`;
+
+      const result = await signupParticipant(name, fullPhoneNumber, selectedNum);
 
       if (result.success) {
         setSuccess(true);
@@ -202,19 +205,29 @@ export function SignupForm({
 
           <Field>
             <FieldLabel htmlFor="phone">Phone/WhatsApp Number</FieldLabel>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="+234 XXX XXX XXX"
-              required
-              pattern="[\+]?[0-9\s\-\(\)\.]{10,20}"
-              title="Please enter a valid phone number (10-15 digits)"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none text-sm leading-loose">
+                +234
+              </span>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="803 123 4567"
+                required
+                pattern="[0-9\s]{10,15}"
+                title="Please enter a valid phone number (10 digits)"
+                value={phoneNumber}
+                onChange={(e) => {
+                  // Only allow numbers and spaces
+                  const value = e.target.value.replace(/[^\d\s]/g, '');
+                  setPhoneNumber(value);
+                }}
+                disabled={isLoading}
+                className="pl-14"
+              />
+            </div>
             <FieldDescription>
-              Include country code (e.g., +234)
+              Enter your number without the country code
             </FieldDescription>
           </Field>
 
@@ -222,8 +235,8 @@ export function SignupForm({
             <Alert className="max-w-md py-4 px-2.5 bg-blue-100 text-blue-500">
               <AlertTitle>Notice:</AlertTitle>
               <AlertDescription className="text-blue-500 text-balance">
-                You&apos;re the first to sign up! You&apos;ll be automatically
-                assigned to the second participant.
+                You&apos;re the first to sign up! You can select any number from 1-100,
+                or skip and select later.
               </AlertDescription>
             </Alert>
           )}
@@ -259,8 +272,8 @@ export function SignupForm({
                 </SelectContent>
               </Select>
               <FieldDescription>
-                {availableNumbers.length} number
-                {availableNumbers.length !== 1 ? "s" : ""} available
+                Select any number 1-100. Numbers marked &ldquo;(not yet registered)&rdquo;
+                may be assigned later. {availableNumbers.length} available.
               </FieldDescription>
             </Field>
           )}

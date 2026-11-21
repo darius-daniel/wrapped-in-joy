@@ -97,30 +97,119 @@ export async function checkAssignment(phoneNumber: string): Promise<
 }
 
 /**
- * Get all available numbers that can be selected
- * A number is available if:
- * 1. Someone has already signed up with that serial number
- * 2. No one has selected that number yet
+ * Get all available numbers (1-100) that haven't been selected yet
  */
 export async function getAvailableNumbers(): Promise<AvailableNumber[]> {
   // Get all participants
   const allParticipants = await db.orm.public.Participant.all();
 
-  // Get all selected numbers
+  // Get all selected numbers (numbers that have been claimed)
   const selectedNumbers = new Set(
     allParticipants
       .map((p) => p.selectedNumber)
       .filter((n): n is number => n !== null)
   );
 
-  // Return participants whose numbers haven't been selected yet, sorted by serial number
-  return allParticipants
-    .filter((p) => !selectedNumbers.has(p.serialNumber))
-    .sort((a, b) => a.serialNumber - b.serialNumber)
-    .map((p) => ({
-      serialNumber: p.serialNumber,
-      name: p.name,
-    }));
+  // Create array of numbers 1-100 that haven't been selected
+  const availableNumbers: AvailableNumber[] = [];
+
+  for (let i = 1; i <= 100; i++) {
+    if (!selectedNumbers.has(i)) {
+      // Check if this serial number has a participant registered
+      const participant = allParticipants.find((p) => p.serialNumber === i);
+
+      availableNumbers.push({
+        serialNumber: i,
+        name: participant ? participant.name : `Number ${i} (not yet registered)`,
+      });
+    }
+  }
+
+  return availableNumbers.sort((a, b) => a.serialNumber - b.serialNumber);
+}
+
+/**
+ * Admin function: Reassign participants who selected unregistered numbers
+ * Call this after registration closes
+ */
+export async function reassignUnregisteredNumbers() {
+  try {
+    const allParticipants = await db.orm.public.Participant.all();
+
+    // Get all registered serial numbers
+    const registeredNumbers = new Set(
+      allParticipants.map((p) => p.serialNumber)
+    );
+
+    // Find participants who selected numbers that were never registered
+    const needReassignment = allParticipants.filter(
+      (p) => p.selectedNumber !== null && !registeredNumbers.has(p.selectedNumber)
+    );
+
+    if (needReassignment.length === 0) {
+      return {
+        success: true,
+        message: "No reassignments needed",
+        count: 0,
+      };
+    }
+
+    // Get available registered serial numbers (not yet selected)
+    const selectedNumbers = new Set(
+      allParticipants
+        .map((p) => p.selectedNumber)
+        .filter((n): n is number => n !== null && registeredNumbers.has(n))
+    );
+
+    const availableRegistered = Array.from(registeredNumbers)
+      .filter((n) => !selectedNumbers.has(n))
+      .sort((a, b) => a - b);
+
+    if (availableRegistered.length < needReassignment.length) {
+      return {
+        success: false,
+        error: "Not enough available registered participants for reassignment",
+        needReassignment: needReassignment.length,
+        available: availableRegistered.length,
+      };
+    }
+
+    // Perform reassignments
+    const reassignments = [];
+    for (let i = 0; i < needReassignment.length; i++) {
+      const participant = needReassignment[i];
+      const newAssignment = availableRegistered[i];
+
+      await db.orm.public.Participant.where({
+        id: participant.id,
+      }).update({
+        selectedNumber: newAssignment,
+        updatedAt: new Date(),
+      });
+
+      reassignments.push({
+        participant: participant.name,
+        oldNumber: participant.selectedNumber,
+        newNumber: newAssignment,
+      });
+    }
+
+    revalidatePath("/signup");
+    revalidatePath("/check-assignment");
+
+    return {
+      success: true,
+      message: "Reassignments completed",
+      count: reassignments.length,
+      details: reassignments,
+    };
+  } catch (error) {
+    console.error("Reassignment error:", error);
+    return {
+      success: false,
+      error: "An error occurred during reassignment",
+    };
+  }
 }
 
 /**
@@ -173,13 +262,23 @@ export async function signupParticipant(
     if (!trimmedPhone) {
       return { success: false, error: "Phone number is required" };
     }
-    // Remove common formatting characters for validation
-    const cleanedPhone = trimmedPhone.replace(/[\s\-\(\)\.]/g, '');
-    // Check if it contains only digits and optional + at the start
-    if (!/^\+?[0-9]{10,15}$/.test(cleanedPhone)) {
+
+    // Ensure it starts with +234
+    if (!trimmedPhone.startsWith('+234')) {
       return {
         success: false,
-        error: "Please enter a valid phone number (10-15 digits, optional + prefix)"
+        error: "Phone number must start with +234"
+      };
+    }
+
+    // Remove +234 prefix and any formatting characters for validation
+    const cleanedPhone = trimmedPhone.substring(4).replace(/[\s\-\(\)\.]/g, '');
+
+    // Check if it contains exactly 10 digits after +234
+    if (!/^[0-9]{10}$/.test(cleanedPhone)) {
+      return {
+        success: false,
+        error: "Please enter a valid 10-digit Nigerian phone number"
       };
     }
 
@@ -187,31 +286,46 @@ export async function signupParticipant(
     const count = await getParticipantCount();
     const newSerialNumber = count + 1;
 
-    // If this is not the first participant, validate selected number
-    if (count > 0 && selectedNumber === null) {
+    // First participant can skip selection (will be assigned later)
+    if (count === 0 && selectedNumber === null) {
+      // This is allowed for first participant
+    } else if (count > 0 && selectedNumber === null) {
+      // For everyone else, selection is required
       return {
         success: false,
         error: "Please select a number to gift to",
       };
     }
 
-    // If a number was selected, verify it's available and get the participant details
+    // If a number was selected, verify it's available (not already taken)
     let selectedParticipant = undefined;
     if (selectedNumber !== null) {
-      const availableNumbers = await getAvailableNumbers();
-      const selectedAvailable = availableNumbers.find(
-        (n) => n.serialNumber === selectedNumber
-      );
-
-      if (!selectedAvailable) {
+      // Check if the number is in valid range (1-100)
+      if (selectedNumber < 1 || selectedNumber > 100) {
         return {
           success: false,
-          error: "The selected number is no longer available",
+          error: "Please select a number between 1 and 100",
         };
       }
 
-      // Get the full participant details for the selected number
+      // Check if this number has already been selected by someone else
       const allParticipants = await db.orm.public.Participant.all();
+      const alreadySelected = allParticipants.find(
+        (p) => p.selectedNumber === selectedNumber
+      );
+
+      if (alreadySelected) {
+        // Number already taken - suggest available numbers
+        const availableNumbers = await getAvailableNumbers();
+        const suggestions = availableNumbers.slice(0, 5).map(n => n.serialNumber).join(", ");
+
+        return {
+          success: false,
+          error: `Number ${selectedNumber} has already been selected. Try one of these: ${suggestions}`,
+        };
+      }
+
+      // Get participant details if they exist for this serial number
       const selectedParticipantData = allParticipants.find(
         (p) => p.serialNumber === selectedNumber
       );
@@ -221,6 +335,13 @@ export async function signupParticipant(
           name: selectedParticipantData.name,
           phoneNumber: selectedParticipantData.phoneNumber,
           serialNumber: selectedParticipantData.serialNumber,
+        };
+      } else {
+        // Number not yet assigned to anyone - they're claiming it for future
+        selectedParticipant = {
+          name: `Number ${selectedNumber} (not yet registered)`,
+          phoneNumber: "To be determined",
+          serialNumber: selectedNumber,
         };
       }
     }
@@ -234,23 +355,6 @@ export async function signupParticipant(
       selectedNumber: selectedNumber,
       updatedAt: new Date(),
     });
-
-    // If this is the second participant and the first participant hasn't selected anyone,
-    // assign the second participant to the first
-    if (count === 1) {
-      const firstParticipant = await db.orm.public.Participant.where({
-        serialNumber: 1,
-      }).first();
-
-      if (firstParticipant && firstParticipant.selectedNumber === null) {
-        await db.orm.public.Participant.where({
-          id: firstParticipant.id,
-        }).update({
-          selectedNumber: newSerialNumber,
-          updatedAt: new Date(),
-        });
-      }
-    }
 
     revalidatePath("/signup");
     return {

@@ -40,7 +40,10 @@ export function CheckAssignmentForm({
     setIsLoading(true);
 
     try {
-      const response = await checkAssignment(phoneNumber);
+      // Prepend +234 to the phone number
+      const fullPhoneNumber = `+234${phoneNumber.replace(/\s/g, '')}`;
+
+      const response = await checkAssignment(fullPhoneNumber);
 
       if (response.success && 'participant' in response) {
         setResult({
@@ -142,17 +145,29 @@ export function CheckAssignmentForm({
 
           <Field>
             <FieldLabel htmlFor="phone">Your Phone/WhatsApp Number</FieldLabel>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="+234 XXX XXX XXX"
-              required
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none">
+                +234
+              </span>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="803 123 4567"
+                required
+                pattern="[0-9\s]{10,15}"
+                title="Please enter a valid phone number (10 digits)"
+                value={phoneNumber}
+                onChange={(e) => {
+                  // Only allow numbers and spaces
+                  const value = e.target.value.replace(/[^\d\s]/g, '');
+                  setPhoneNumber(value);
+                }}
+                disabled={isLoading}
+                className="pl-14"
+              />
+            </div>
             <FieldDescription>
-              Use the same number you registered with
+              Use the same number you registered with (without +234)
             </FieldDescription>
           </Field>
 
