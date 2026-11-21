@@ -42,13 +42,13 @@ export function CheckAssignmentForm({
     try {
       const response = await checkAssignment(phoneNumber);
 
-      if (response.success) {
+      if (response.success && 'participant' in response) {
         setResult({
           participant: response.participant,
           assignedTo: response.assignedTo || null,
           message: response.message,
         });
-      } else {
+      } else if (!response.success && 'error' in response) {
         setError(response.error);
       }
     } catch (err) {

@@ -11,7 +11,23 @@ export type AvailableNumber = {
 /**
  * Check a participant's assignment by phone number
  */
-export async function checkAssignment(phoneNumber: string) {
+export async function checkAssignment(phoneNumber: string): Promise<
+  | {
+      success: true;
+      participant: {
+        name: string;
+        serialNumber: number;
+        phoneNumber: string;
+      };
+      assignedTo: {
+        name: string;
+        serialNumber: number;
+        phoneNumber: string;
+      } | null;
+      message?: string;
+    }
+  | { success: false; error: string }
+> {
   try {
     const trimmedPhone = phoneNumber.trim();
 
