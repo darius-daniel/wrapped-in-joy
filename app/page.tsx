@@ -1,19 +1,20 @@
+import { SignupForm } from "@/components/signup-form";
 import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between pt-16 pb-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="h-[94px] w-[187.5px] self-center"
-          src="/lightwk_logo_white.png"
-          alt="Next.js logo"
-          width={1125}
-          height={564}
-          priority
-        />
-
-      </main>
+    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
+      <Image
+        className="dark:invert h-[53.5] w-[110px] self-center"
+        src="/lightwk_logo_dark.png"
+        alt="Next.js logo"
+        width={1125}
+        height={564}
+        priority
+      />
+      <div className="w-full max-w-sm">
+        <SignupForm />
+      </div>
     </div>
   );
 }

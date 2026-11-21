@@ -1,0 +1,20 @@
+// use prisma-8
+// Contract inferred from the live database schema. Edit as needed, then run `prisma contract emit`.
+
+model Participant {
+  id             String                       @id(map: "Participant_pkey")
+  name           String
+  phoneNumber    String
+  serialNumber   Int
+  selectedNumber Int
+  createdAt      DateTime(storage: timestamp) @default(now())
+  updatedAt      DateTime(storage: timestamp)
+
+  @@index([selectedNumber], map: "Participant_selectedNumber_idx")
+  @@index([selectedNumber], map: "Participant_selectedNumber_key", unique: true)
+  @@index([serialNumber], map: "Participant_serialNumber_idx")
+  @@index([serialNumber], map: "Participant_serialNumber_key", unique: true)
+}
+
+extension prisma_postgres {
+}
