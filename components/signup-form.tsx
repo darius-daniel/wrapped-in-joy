@@ -33,6 +33,7 @@ export function SignupForm({
 }: React.ComponentProps<"div">) {
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [location, setLocation] = useState("");
   const [selectedNumber, setSelectedNumber] = useState<string>("");
   const [availableNumbers, setAvailableNumbers] = useState<AvailableNumber[]>(
     []
@@ -84,7 +85,7 @@ export function SignupForm({
       // Prepend +234 to the phone number
       const fullPhoneNumber = `+234${phoneNumber.replace(/\s/g, '')}`;
 
-      const result = await signupParticipant(name, fullPhoneNumber, selectedNum);
+      const result = await signupParticipant(name, fullPhoneNumber, location, selectedNum);
 
       if (result.success) {
         setSuccess(true);
@@ -94,6 +95,7 @@ export function SignupForm({
         });
         setName("");
         setPhoneNumber("");
+        setLocation("");
         setSelectedNumber("");
 
         // Refresh the available numbers
@@ -228,6 +230,24 @@ export function SignupForm({
             </div>
             <FieldDescription>
               Enter your number without the country code
+            </FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="location">Location</FieldLabel>
+            <Input
+              id="location"
+              type="text"
+              placeholder="e.g., Lagos, Abuja, Port Harcourt"
+              required
+              minLength={2}
+              maxLength={100}
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              disabled={isLoading}
+            />
+            <FieldDescription>
+              Your city or area
             </FieldDescription>
           </Field>
 

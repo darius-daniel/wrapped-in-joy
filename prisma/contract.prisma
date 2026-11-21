@@ -5,6 +5,7 @@ model Participant {
   id             String                       @id(map: "Participant_pkey")
   name           String
   phoneNumber    String
+  location       String?
   serialNumber   Int
   selectedNumber Int?
   createdAt      DateTime(storage: timestamp) @default(now())

@@ -18,11 +18,13 @@ export async function checkAssignment(phoneNumber: string): Promise<
         name: string;
         serialNumber: number;
         phoneNumber: string;
+        location?: string;
       };
       assignedTo: {
         name: string;
         serialNumber: number;
         phoneNumber: string;
+        location?: string;
       } | null;
       message?: string;
     }
@@ -56,6 +58,7 @@ export async function checkAssignment(phoneNumber: string): Promise<
           name: participant.name,
           serialNumber: participant.serialNumber,
           phoneNumber: participant.phoneNumber,
+          location: participant.location || undefined,
         },
         assignedTo: null,
         message: "You'll be notified once you're assigned to someone!",
@@ -80,11 +83,13 @@ export async function checkAssignment(phoneNumber: string): Promise<
         name: participant.name,
         serialNumber: participant.serialNumber,
         phoneNumber: participant.phoneNumber,
+        location: participant.location || undefined,
       },
       assignedTo: {
         name: assignedTo.name,
         serialNumber: assignedTo.serialNumber,
         phoneNumber: assignedTo.phoneNumber,
+        location: assignedTo.location || undefined,
       },
     };
   } catch (error) {
@@ -238,6 +243,7 @@ type SignupResult =
 export async function signupParticipant(
   name: string,
   phoneNumber: string,
+  location: string,
   selectedNumber: number | null
 ): Promise<SignupResult> {
   try {
@@ -255,6 +261,18 @@ export async function signupParticipant(
     // Check for valid name characters (letters, spaces, hyphens, apostrophes)
     if (!/^[a-zA-Z\s\-'\.]+$/.test(trimmedName)) {
       return { success: false, error: "Name can only contain letters, spaces, hyphens, and apostrophes" };
+    }
+
+    // Validate location
+    const trimmedLocation = location.trim();
+    if (!trimmedLocation) {
+      return { success: false, error: "Location is required" };
+    }
+    if (trimmedLocation.length < 2) {
+      return { success: false, error: "Location must be at least 2 characters long" };
+    }
+    if (trimmedLocation.length > 100) {
+      return { success: false, error: "Location is too long (max 100 characters)" };
     }
 
     // Validate phone number
@@ -351,6 +369,7 @@ export async function signupParticipant(
       id: crypto.randomUUID(),
       name: trimmedName,
       phoneNumber: trimmedPhone,
+      ...(trimmedLocation && { location: trimmedLocation }),
       serialNumber: newSerialNumber,
       selectedNumber: selectedNumber,
       updatedAt: new Date(),

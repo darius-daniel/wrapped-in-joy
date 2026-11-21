@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS "Participant" (
   "id" TEXT PRIMARY KEY,
   "name" TEXT NOT NULL,
   "phoneNumber" TEXT NOT NULL,
+  "location" TEXT NOT NULL,
   "serialNumber" INTEGER NOT NULL UNIQUE,
   "selectedNumber" INTEGER UNIQUE,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -13,23 +14,23 @@ CREATE TABLE IF NOT EXISTS "Participant" (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX IF NOT EXISTS "Participant_serialNumber_idx" 
+CREATE INDEX IF NOT EXISTS "Participant_serialNumber_idx"
   ON "Participant"("serialNumber");
 
-CREATE INDEX IF NOT EXISTS "Participant_selectedNumber_idx" 
+CREATE INDEX IF NOT EXISTS "Participant_selectedNumber_idx"
   ON "Participant"("selectedNumber");
 
 -- Verify the table was created
-SELECT 
-  table_name, 
-  column_name, 
-  data_type, 
+SELECT
+  table_name,
+  column_name,
+  data_type,
   is_nullable
-FROM 
+FROM
   information_schema.columns
-WHERE 
+WHERE
   table_name = 'Participant'
-ORDER BY 
+ORDER BY
   ordinal_position;
 
 -- Show count (should be 0 initially)

@@ -24,11 +24,13 @@ export function CheckAssignmentForm({
       name: string;
       serialNumber: number;
       phoneNumber: string;
+      location?: string;
     };
     assignedTo: {
       name: string;
       serialNumber: number;
       phoneNumber: string;
+      location?: string;
     } | null;
     message?: string;
   } | null>(null);
@@ -100,8 +102,13 @@ export function CheckAssignmentForm({
                   <p className="text-sm text-gray-600">
                     Serial #{result.assignedTo.serialNumber}
                   </p>
+                  {result.assignedTo.location && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      📍 {result.assignedTo.location}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-600 mt-2">
-                    {result.assignedTo.phoneNumber}
+                    📞 {result.assignedTo.phoneNumber}
                   </p>
                 </div>
               </div>
