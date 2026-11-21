@@ -154,7 +154,7 @@ export function CheckAssignmentForm({
           <Field>
             <FieldLabel htmlFor="phone">Your Phone/WhatsApp Number</FieldLabel>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none text-sm">
                 +234
               </span>
               <Input
