@@ -12,6 +12,10 @@
 - [x] Form validation (required fields, availability checking)
 - [x] Success/error feedback
 - [x] Loading states
+- [x] **Display selected participant info after registration** ✨ NEW
+- [x] **Backend name validation** (length, allowed characters) ✨ NEW
+- [x] **Backend phone validation** (format, length) ✨ NEW
+- [x] **Frontend HTML5 validation** (immediate feedback) ✨ NEW
 
 ### Database
 - [x] Prisma 8 schema with nullable selectedNumber
@@ -31,6 +35,7 @@
 - [x] IMPLEMENTATION.md - Architecture and design decisions
 - [x] QUICK_START.md - Quick reference
 - [x] STATUS.md - This file
+- [x] VALIDATION.md - Validation rules and implementation ✨ NEW
 
 ## 🔧 Needs Testing
 
@@ -122,15 +127,15 @@ app/
   page.tsx            ← Home page (redirects to /signup)
   signup/
     page.tsx          ← Signup form page
-  
+
 components/
   signup-form.tsx     ← Main form component
   ui/                 ← shadcn components
-  
+
 prisma/
   contract.prisma     ← Database schema
   db.ts              ← Database client
-  
+
 scripts/
   init-db.mjs        ← DB initialization script
 ```
@@ -177,7 +182,7 @@ http://localhost:3000/signup
 
 ```sql
 -- View all participants with their assignments
-SELECT 
+SELECT
   "serialNumber" as "Participant",
   "name",
   "selectedNumber" as "Gifts To"
@@ -229,5 +234,9 @@ You'll know it's working when:
 - ✅ Third person only sees unselected participants
 - ✅ Available numbers decrease as more people sign up
 - ✅ Each participant can only be selected once
+- ✅ After successful registration, user sees who they're gifting to (name, serial #, phone)
+- ✅ Invalid names (e.g., "A", "John123") are rejected with clear error messages
+- ✅ Invalid phone numbers (e.g., "123", "abcd") are rejected with clear error messages
+- ✅ Browser shows validation hints before form submission
 
 That's it! The app is ready for testing. Let me know if you need any adjustments to the UI, validation, or functionality.

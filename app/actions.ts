@@ -44,7 +44,15 @@ export async function getParticipantCount(): Promise<number> {
 }
 
 type SignupResult =
-  | { success: true; serialNumber: number }
+  | {
+      success: true;
+      serialNumber: number;
+      selectedParticipant?: {
+        name: string;
+        phoneNumber: string;
+        serialNumber: number;
+      };
+    }
   | { success: false; error: string };
 
 /**
@@ -56,12 +64,35 @@ export async function signupParticipant(
   selectedNumber: number | null
 ): Promise<SignupResult> {
   try {
-    // Validate inputs
-    if (!name.trim()) {
+    // Validate name
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       return { success: false, error: "Name is required" };
     }
-    if (!phoneNumber.trim()) {
+    if (trimmedName.length < 2) {
+      return { success: false, error: "Name must be at least 2 characters long" };
+    }
+    if (trimmedName.length > 100) {
+      return { success: false, error: "Name is too long (max 100 characters)" };
+    }
+    // Check for valid name characters (letters, spaces, hyphens, apostrophes)
+    if (!/^[a-zA-Z\s\-'\.]+$/.test(trimmedName)) {
+      return { success: false, error: "Name can only contain letters, spaces, hyphens, and apostrophes" };
+    }
+
+    // Validate phone number
+    const trimmedPhone = phoneNumber.trim();
+    if (!trimmedPhone) {
       return { success: false, error: "Phone number is required" };
+    }
+    // Remove common formatting characters for validation
+    const cleanedPhone = trimmedPhone.replace(/[\s\-\(\)\.]/g, '');
+    // Check if it contains only digits and optional + at the start
+    if (!/^\+?[0-9]{10,15}$/.test(cleanedPhone)) {
+      return {
+        success: false,
+        error: "Please enter a valid phone number (10-15 digits, optional + prefix)"
+      };
     }
 
     // Get current participant count to determine serial number
@@ -76,17 +107,32 @@ export async function signupParticipant(
       };
     }
 
-    // If a number was selected, verify it's available
+    // If a number was selected, verify it's available and get the participant details
+    let selectedParticipant = undefined;
     if (selectedNumber !== null) {
       const availableNumbers = await getAvailableNumbers();
-      const isAvailable = availableNumbers.some(
+      const selectedAvailable = availableNumbers.find(
         (n) => n.serialNumber === selectedNumber
       );
 
-      if (!isAvailable) {
+      if (!selectedAvailable) {
         return {
           success: false,
           error: "The selected number is no longer available",
+        };
+      }
+
+      // Get the full participant details for the selected number
+      const allParticipants = await db.orm.public.Participant.all();
+      const selectedParticipantData = allParticipants.find(
+        (p) => p.serialNumber === selectedNumber
+      );
+
+      if (selectedParticipantData) {
+        selectedParticipant = {
+          name: selectedParticipantData.name,
+          phoneNumber: selectedParticipantData.phoneNumber,
+          serialNumber: selectedParticipantData.serialNumber,
         };
       }
     }
@@ -94,8 +140,8 @@ export async function signupParticipant(
     // Create the participant
     await db.orm.public.Participant.create({
       id: crypto.randomUUID(),
-      name: name.trim(),
-      phoneNumber: phoneNumber.trim(),
+      name: trimmedName,
+      phoneNumber: trimmedPhone,
       serialNumber: newSerialNumber,
       selectedNumber: selectedNumber,
       updatedAt: new Date(),
@@ -119,7 +165,11 @@ export async function signupParticipant(
     }
 
     revalidatePath("/signup");
-    return { success: true, serialNumber: newSerialNumber };
+    return {
+      success: true,
+      serialNumber: newSerialNumber,
+      selectedParticipant,
+    };
   } catch (error) {
     console.error("Signup error:", error);
     return {

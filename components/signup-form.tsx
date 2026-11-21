@@ -25,6 +25,7 @@ import {
   signupParticipant,
   type AvailableNumber,
 } from "@/app/actions";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 export function SignupForm({
   className,
@@ -40,6 +41,14 @@ export function SignupForm({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [successData, setSuccessData] = useState<{
+    serialNumber: number;
+    selectedParticipant?: {
+      name: string;
+      phoneNumber: string;
+      serialNumber: number;
+    };
+  } | null>(null);
 
   // Load available numbers on mount and refresh periodically
   useEffect(() => {
@@ -76,6 +85,10 @@ export function SignupForm({
 
       if (result.success) {
         setSuccess(true);
+        setSuccessData({
+          serialNumber: result.serialNumber,
+          selectedParticipant: result.selectedParticipant,
+        });
         setName("");
         setPhoneNumber("");
         setSelectedNumber("");
@@ -97,19 +110,39 @@ export function SignupForm({
     }
   };
 
-  if (success) {
+  if (success && successData) {
     return (
       <div className={cn("flex flex-col gap-6", className)} {...props}>
         <div className="flex flex-col items-center gap-4 text-center p-6 rounded-lg border border-green-200 bg-green-50">
           <h2 className="text-xl font-bold text-green-800">
             🎉 Registration Successful!
           </h2>
-          <p className="text-green-700">
-            Thank you for joining the gift exchange! You&apos;ll receive more details
-            soon.
-          </p>
+          <div className="text-green-700 space-y-2">
+            <p>Your serial number is: <strong>#{successData.serialNumber}</strong></p>
+            {successData.selectedParticipant ? (
+              <div className="mt-4 p-4 bg-white rounded-lg border border-green-300">
+                <p className="font-semibold mb-2">You will be gifting to:</p>
+                <p className="text-lg font-bold text-green-800">
+                  {successData.selectedParticipant.name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Serial #{successData.selectedParticipant.serialNumber}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {successData.selectedParticipant.phoneNumber}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm">
+                You&apos;ll be gifting to the second participant who signs up!
+              </p>
+            )}
+          </div>
           <Button
-            onClick={() => setSuccess(false)}
+            onClick={() => {
+              setSuccess(false);
+              setSuccessData(null);
+            }}
             className="mt-4"
           >
             Register Another Person
@@ -130,12 +163,6 @@ export function SignupForm({
             <FieldDescription>
               Pick your number and discover the joy of giving
             </FieldDescription>
-            {isFirstParticipant && (
-              <p className="text-sm text-muted-foreground mt-2">
-                You&apos;re the first to sign up! You&apos;ll be automatically assigned to
-                the second participant.
-              </p>
-            )}
           </div>
 
           {error && (
@@ -151,10 +178,17 @@ export function SignupForm({
               type="text"
               placeholder="John Doe"
               required
+              minLength={2}
+              maxLength={100}
+              pattern="[a-zA-Z\s\-'\.]+"
+              title="Name can only contain letters, spaces, hyphens, and apostrophes"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={isLoading}
             />
+            <FieldDescription>
+              At least 2 characters, letters only
+            </FieldDescription>
           </Field>
 
           <Field>
@@ -164,11 +198,26 @@ export function SignupForm({
               type="tel"
               placeholder="+234 XXX XXX XXX"
               required
+              pattern="[\+]?[0-9\s\-\(\)\.]{10,20}"
+              title="Please enter a valid phone number (10-15 digits)"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               disabled={isLoading}
             />
+            <FieldDescription>
+              Include country code (e.g., +234)
+            </FieldDescription>
           </Field>
+
+          {isFirstParticipant && (
+            <Alert className="max-w-md py-4 px-2.5 bg-blue-100 text-blue-500">
+              <AlertTitle>Notice:</AlertTitle>
+              <AlertDescription className="text-blue-500 text-balance">
+                You&apos;re the first to sign up! You&apos;ll be automatically
+                assigned to the second participant.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {!isFirstParticipant && (
             <Field>
