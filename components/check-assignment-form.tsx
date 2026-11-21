@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { checkAssignment } from "@/app/actions";
+import Link from "next/link";
 
 export function CheckAssignmentForm({
   className,
@@ -185,12 +186,12 @@ export function CheckAssignmentForm({
           </Field>
 
           <div className="text-center">
-            <a
-              href="/signup"
+            <Link
+              href="/"
               className="text-sm text-blue-600 hover:text-blue-800 underline"
             >
               Haven&apos;t registered yet? Sign up here
-            </a>
+            </Link>
           </div>
         </FieldGroup>
       </form>
