@@ -47,7 +47,7 @@
                 }
               },
               "selectedNumber": {
-                "nullable": false,
+                "nullable": true,
                 "type": {
                   "codecId": "pg/int4@1",
                   "kind": "scalar"
@@ -147,7 +147,7 @@
                 "selectedNumber": {
                   "codecId": "pg/int4@1",
                   "dataType": "pg/int4",
-                  "nullable": false
+                  "nullable": true
                 },
                 "serialNumber": {
                   "codecId": "pg/int4@1",
@@ -208,7 +208,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "7d0e9ed5bc30c7b4d281605ba01c2a7bdcdfd0180a384362e9df446179551a6b"
+    "storageHash": "b26af2ca18c635a2894114c1667f28297a4c465301307b1ed74ee11393f903ee"
   },
   "capabilities": {
     "postgres": {

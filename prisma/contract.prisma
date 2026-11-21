@@ -6,7 +6,7 @@ model Participant {
   name           String
   phoneNumber    String
   serialNumber   Int
-  selectedNumber Int
+  selectedNumber Int?
   createdAt      DateTime(storage: timestamp) @default(now())
   updatedAt      DateTime(storage: timestamp)
 
