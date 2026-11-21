@@ -147,6 +147,15 @@ export function SignupForm({
           >
             Register Another Person
           </Button>
+
+          <div className="text-center mt-2">
+            <a
+              href="/check-assignment"
+              className="text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Check your assignment later
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -261,6 +270,15 @@ export function SignupForm({
               {isLoading ? "Submitting..." : "Submit"}
             </Button>
           </Field>
+
+          <div className="text-center">
+            <a
+              href="/check-assignment"
+              className="text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Already registered? Check your assignment
+            </a>
+          </div>
         </FieldGroup>
       </form>
     </div>

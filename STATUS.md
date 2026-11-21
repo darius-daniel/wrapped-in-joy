@@ -12,10 +12,11 @@
 - [x] Form validation (required fields, availability checking)
 - [x] Success/error feedback
 - [x] Loading states
-- [x] **Display selected participant info after registration** ✨ NEW
-- [x] **Backend name validation** (length, allowed characters) ✨ NEW
-- [x] **Backend phone validation** (format, length) ✨ NEW
-- [x] **Frontend HTML5 validation** (immediate feedback) ✨ NEW
+- [x] Display selected participant info after registration ✨
+- [x] Backend name validation (length, allowed characters) ✨
+- [x] Backend phone validation (format, length) ✨
+- [x] Frontend HTML5 validation (immediate feedback) ✨
+- [x] **Check assignment page** (lookup by phone number) ✨ NEW
 
 ### Database
 - [x] Prisma 8 schema with nullable selectedNumber
@@ -35,7 +36,8 @@
 - [x] IMPLEMENTATION.md - Architecture and design decisions
 - [x] QUICK_START.md - Quick reference
 - [x] STATUS.md - This file
-- [x] VALIDATION.md - Validation rules and implementation ✨ NEW
+- [x] VALIDATION.md - Validation rules and implementation
+- [x] NOTIFICATIONS.md - How to notify first participant ✨ NEW
 
 ## 🔧 Needs Testing
 

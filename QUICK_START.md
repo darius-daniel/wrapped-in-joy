@@ -66,19 +66,19 @@ pnpm contract:emit
 
 ```sql
 -- View all participants
-SELECT "serialNumber", "name", "selectedNumber" 
-FROM "Participant" 
+SELECT "serialNumber", "name", "selectedNumber"
+FROM "Participant"
 ORDER BY "serialNumber";
 
 -- Reset everything
 TRUNCATE TABLE "Participant";
 
 -- Check who's available (not selected yet)
-SELECT "serialNumber", "name" 
-FROM "Participant" 
+SELECT "serialNumber", "name"
+FROM "Participant"
 WHERE "serialNumber" NOT IN (
-  SELECT "selectedNumber" 
-  FROM "Participant" 
+  SELECT "selectedNumber"
+  FROM "Participant"
   WHERE "selectedNumber" IS NOT NULL
 );
 ```
@@ -93,4 +93,5 @@ WHERE "serialNumber" NOT IN (
 ## URLs
 
 - Main signup: http://localhost:3000 or http://localhost:3000/signup
+- Check assignment: http://localhost:3000/check-assignment
 - Test page: http://localhost:3000/test

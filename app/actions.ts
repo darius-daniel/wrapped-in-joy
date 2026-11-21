@@ -9,6 +9,78 @@ export type AvailableNumber = {
 };
 
 /**
+ * Check a participant's assignment by phone number
+ */
+export async function checkAssignment(phoneNumber: string) {
+  try {
+    const trimmedPhone = phoneNumber.trim();
+
+    if (!trimmedPhone) {
+      return { success: false, error: "Phone number is required" };
+    }
+
+    // Find participant by phone number
+    const allParticipants = await db.orm.public.Participant.all();
+    const participant = allParticipants.find(
+      (p) => p.phoneNumber === trimmedPhone
+    );
+
+    if (!participant) {
+      return {
+        success: false,
+        error: "No registration found with this phone number",
+      };
+    }
+
+    // If they haven't been assigned yet (first participant before second signs up)
+    if (participant.selectedNumber === null) {
+      return {
+        success: true,
+        participant: {
+          name: participant.name,
+          serialNumber: participant.serialNumber,
+          phoneNumber: participant.phoneNumber,
+        },
+        assignedTo: null,
+        message: "You'll be notified once you're assigned to someone!",
+      };
+    }
+
+    // Find who they're assigned to
+    const assignedTo = allParticipants.find(
+      (p) => p.serialNumber === participant.selectedNumber
+    );
+
+    if (!assignedTo) {
+      return {
+        success: false,
+        error: "Assignment data incomplete. Please contact the organizer.",
+      };
+    }
+
+    return {
+      success: true,
+      participant: {
+        name: participant.name,
+        serialNumber: participant.serialNumber,
+        phoneNumber: participant.phoneNumber,
+      },
+      assignedTo: {
+        name: assignedTo.name,
+        serialNumber: assignedTo.serialNumber,
+        phoneNumber: assignedTo.phoneNumber,
+      },
+    };
+  } catch (error) {
+    console.error("Check assignment error:", error);
+    return {
+      success: false,
+      error: "An error occurred. Please try again.",
+    };
+  }
+}
+
+/**
  * Get all available numbers that can be selected
  * A number is available if:
  * 1. Someone has already signed up with that serial number
