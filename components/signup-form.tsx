@@ -251,52 +251,43 @@ export function SignupForm({
             </FieldDescription>
           </Field>
 
-          {isFirstParticipant && (
-            <Alert className="max-w-md py-4 px-2.5 bg-blue-100 text-blue-500">
-              <AlertTitle>Notice:</AlertTitle>
-              <AlertDescription className="text-blue-500 text-balance">
-                You&apos;re the first to sign up! You can select any number from 1-100,
-                or skip and select later.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {!isFirstParticipant && (
-            <Field>
-              <FieldLabel htmlFor="giftee">Who will you gift to?</FieldLabel>
-              <Select
-                value={selectedNumber || undefined}
-                onValueChange={(value) => setSelectedNumber(value || "")}
-                disabled={isLoading || availableNumbers.length === 0}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a number" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {availableNumbers.length === 0 ? (
-                      <SelectItem value="none" disabled>
-                        No available numbers
+          <Field>
+            <FieldLabel htmlFor="giftee">
+              Who will you gift to? {isFirstParticipant && "(Optional for first participant)"}
+            </FieldLabel>
+            <Select
+              value={selectedNumber || undefined}
+              onValueChange={(value) => setSelectedNumber(value || "")}
+              disabled={isLoading || availableNumbers.length === 0}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a number (1-100)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {availableNumbers.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      No available numbers
+                    </SelectItem>
+                  ) : (
+                    availableNumbers.map((item) => (
+                      <SelectItem
+                        key={item.serialNumber}
+                        value={item.serialNumber.toString()}
+                      >
+                        #{item.serialNumber} - {item.name}
                       </SelectItem>
-                    ) : (
-                      availableNumbers.map((item) => (
-                        <SelectItem
-                          key={item.serialNumber}
-                          value={item.serialNumber.toString()}
-                        >
-                          #{item.serialNumber} - {item.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Select any number 1-100. Numbers marked &ldquo;(not yet registered)&rdquo;
-                may be assigned later. {availableNumbers.length} available.
-              </FieldDescription>
-            </Field>
-          )}
+                    ))
+                  )}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <FieldDescription>
+              {isFirstParticipant
+                ? "You can select any number 1-100, or skip and select later."
+                : `Select any number 1-100. Numbers marked "(not yet registered)" may be assigned later. ${availableNumbers.length} available.`}
+            </FieldDescription>
+          </Field>
 
           <Field>
             <Button type="submit" disabled={isLoading} className="w-full">
