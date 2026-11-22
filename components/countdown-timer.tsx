@@ -73,7 +73,7 @@ export function CountdownTimer({ deadline }: CountdownTimerProps) {
         <div className="flex items-center pb-6 text-2xl font-bold text-gray-400">:</div>
         <FlipCard value={timeLeft.seconds} label="Secs" />
       </div>
-      <p className="text-center text-xs text-gray-600 mt-3">
+      <p className="text-center text-xs text-gray-600 mt-3 font-bold">
         Midnight, November 25th, 2026
       </p>
     </div>

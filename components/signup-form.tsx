@@ -121,7 +121,7 @@ export function SignupForm({
           <div className="flex flex-col items-center gap-3 text-center">
             <h1 className="text-xl font-bold">Silent Night, Secret Gifts.</h1>
             <FieldDescription>
-              Join the gift exchange lottery
+              Sign up to join the gift exchange lottery. Find out your gift assignment after the deadline
             </FieldDescription>
 
             {/* Participant Count */}
