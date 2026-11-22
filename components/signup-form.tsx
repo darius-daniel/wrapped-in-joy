@@ -1,7 +1,6 @@
 "use client";
 
 import { cn } from "cn";
-
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -12,20 +11,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectGroup,
-  SelectItem,
-} from "@/components/ui/select";
-import { SelectContent } from "./ui/select";
-import {
-  getAvailableNumbers,
   getParticipantCount,
   signupParticipant,
-  type AvailableNumber,
 } from "@/app/actions";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { CountdownTimer } from "@/components/countdown-timer";
 
 export function SignupForm({
   className,
@@ -34,37 +23,24 @@ export function SignupForm({
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [location, setLocation] = useState("");
-  const [selectedNumber, setSelectedNumber] = useState<string>("");
-  const [availableNumbers, setAvailableNumbers] = useState<AvailableNumber[]>(
-    []
-  );
   const [participantCount, setParticipantCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [successData, setSuccessData] = useState<{
     serialNumber: number;
-    selectedParticipant?: {
-      name: string;
-      phoneNumber: string;
-      serialNumber: number;
-    };
   } | null>(null);
 
-  // Load available numbers on mount and refresh periodically
+  // Load participant count
   useEffect(() => {
     async function loadData() {
-      const [numbers, count] = await Promise.all([
-        getAvailableNumbers(),
-        getParticipantCount(),
-      ]);
-      setAvailableNumbers(numbers);
+      const count = await getParticipantCount();
       setParticipantCount(count);
     }
 
     loadData();
 
-    // Refresh every 5 seconds to show real-time updates
+    // Refresh every 5 seconds
     const interval = setInterval(loadData, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -75,35 +51,22 @@ export function SignupForm({
     setIsLoading(true);
 
     try {
-      const selectedNum =
-        participantCount === 0
-          ? null
-          : selectedNumber
-            ? parseInt(selectedNumber, 10)
-            : null;
-
       // Prepend +234 to the phone number
       const fullPhoneNumber = `+234${phoneNumber.replace(/\s/g, '')}`;
 
-      const result = await signupParticipant(name, fullPhoneNumber, location, selectedNum);
+      const result = await signupParticipant(name, fullPhoneNumber, location, null);
 
       if (result.success) {
         setSuccess(true);
         setSuccessData({
           serialNumber: result.serialNumber,
-          selectedParticipant: result.selectedParticipant,
         });
         setName("");
         setPhoneNumber("");
         setLocation("");
-        setSelectedNumber("");
 
-        // Refresh the available numbers
-        const [numbers, count] = await Promise.all([
-          getAvailableNumbers(),
-          getParticipantCount(),
-        ]);
-        setAvailableNumbers(numbers);
+        // Refresh the participant count
+        const count = await getParticipantCount();
         setParticipantCount(count);
       } else {
         setError(result.error);
@@ -124,24 +87,9 @@ export function SignupForm({
           </h2>
           <div className="text-green-700 space-y-2">
             <p>Your serial number is: <strong>#{successData.serialNumber}</strong></p>
-            {successData.selectedParticipant ? (
-              <div className="mt-4 p-4 bg-white rounded-lg border border-green-300">
-                <p className="font-semibold mb-2">You will be gifting to:</p>
-                <p className="text-lg font-bold text-green-800">
-                  {successData.selectedParticipant.name}
-                </p>
-                <p className="text-sm text-gray-600">
-                  Serial #{successData.selectedParticipant.serialNumber}
-                </p>
-                <p className="text-sm text-gray-600">
-                  {successData.selectedParticipant.phoneNumber}
-                </p>
-              </div>
-            ) : (
-              <p className="mt-4 text-sm">
-                You&apos;ll be gifting to the second participant who signs up!
-              </p>
-            )}
+            <p className="mt-4 text-sm">
+              Your gift assignment will be revealed after the signup deadline on <strong>November 25th at midnight</strong>.
+            </p>
           </div>
           <Button
             onClick={() => {
@@ -166,17 +114,25 @@ export function SignupForm({
     );
   }
 
-  const isFirstParticipant = participantCount === 0;
-
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <form onSubmit={handleSubmit}>
         <FieldGroup>
-          <div className="flex flex-col items-center gap-2 text-center">
+          <div className="flex flex-col items-center gap-3 text-center">
             <h1 className="text-xl font-bold">Silent Night, Secret Gifts.</h1>
             <FieldDescription>
-              Pick your number and discover the joy of giving
+              Join the gift exchange lottery
             </FieldDescription>
+            
+            {/* Participant Count */}
+            <div className="px-4 py-2 rounded-lg bg-blue-50 border border-blue-200">
+              <p className="text-sm font-semibold text-blue-800">
+                {participantCount} {participantCount === 1 ? 'participant' : 'participants'} registered
+              </p>
+            </div>
+            
+            {/* Countdown Timer */}
+            <CountdownTimer deadline="2024-11-25T00:00:00" />
           </div>
 
           {error && (
@@ -248,44 +204,6 @@ export function SignupForm({
             />
             <FieldDescription>
               Your city or area
-            </FieldDescription>
-          </Field>
-
-          <Field>
-            <FieldLabel htmlFor="giftee">
-              Who will you gift to? {isFirstParticipant && "(Optional for first participant)"}
-            </FieldLabel>
-            <Select
-              value={selectedNumber || undefined}
-              onValueChange={(value) => setSelectedNumber(value || "")}
-              disabled={isLoading || availableNumbers.length === 0}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a number (1-100)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {availableNumbers.length === 0 ? (
-                    <SelectItem value="none" disabled>
-                      No available numbers
-                    </SelectItem>
-                  ) : (
-                    availableNumbers.map((item) => (
-                      <SelectItem
-                        key={item.serialNumber}
-                        value={item.serialNumber.toString()}
-                      >
-                        #{item.serialNumber} - {item.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              {isFirstParticipant
-                ? "You can select any number 1-100, or skip and select later."
-                : `Select any number 1-100. Numbers marked "(not yet registered)" may be assigned later. ${availableNumbers.length} available.`}
             </FieldDescription>
           </Field>
 

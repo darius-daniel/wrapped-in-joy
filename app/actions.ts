@@ -134,85 +134,89 @@ export async function getAvailableNumbers(): Promise<AvailableNumber[]> {
 }
 
 /**
- * Admin function: Reassign participants who selected unregistered numbers
- * Call this after registration closes
+ * Admin function: Run the lottery draw to randomly assign participants
+ * Call this after the signup deadline
  */
-export async function reassignUnregisteredNumbers() {
+export async function runLotteryDraw() {
   try {
     const allParticipants = await db.orm.public.Participant.all();
 
-    // Get all registered serial numbers
-    const registeredNumbers = new Set(
-      allParticipants.map((p) => p.serialNumber)
-    );
+    if (allParticipants.length < 2) {
+      return {
+        success: false,
+        error: "Need at least 2 participants to run the lottery",
+      };
+    }
 
-    // Find participants who selected numbers that were never registered
-    const needReassignment = allParticipants.filter(
-      (p) => p.selectedNumber !== null && !registeredNumbers.has(p.selectedNumber)
-    );
+    // Get participants without assignments
+    const unassigned = allParticipants.filter(p => p.selectedNumber === null);
 
-    if (needReassignment.length === 0) {
+    if (unassigned.length === 0) {
       return {
         success: true,
-        message: "No reassignments needed",
+        message: "All participants already have assignments",
         count: 0,
       };
     }
 
-    // Get available registered serial numbers (not yet selected)
-    const selectedNumbers = new Set(
-      allParticipants
-        .map((p) => p.selectedNumber)
-        .filter((n): n is number => n !== null && registeredNumbers.has(n))
-    );
+    // Create a pool of all serial numbers
+    const allSerialNumbers = allParticipants.map(p => p.serialNumber);
 
-    const availableRegistered = Array.from(registeredNumbers)
-      .filter((n) => !selectedNumbers.has(n))
-      .sort((a, b) => a - b);
-
-    if (availableRegistered.length < needReassignment.length) {
-      return {
-        success: false,
-        error: "Not enough available registered participants for reassignment",
-        needReassignment: needReassignment.length,
-        available: availableRegistered.length,
-      };
+    // Fisher-Yates shuffle for random assignment
+    const shuffled = [...allSerialNumbers];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    // Perform reassignments
-    const reassignments = [];
-    for (let i = 0; i < needReassignment.length; i++) {
-      const participant = needReassignment[i];
-      const newAssignment = availableRegistered[i];
+    // Assign each participant to the next one in the shuffled array
+    // This creates a single loop where everyone gifts to someone
+    const assignments = [];
+    for (let i = 0; i < allParticipants.length; i++) {
+      const participant = allParticipants[i];
+      const assignedTo = shuffled[(i + 1) % shuffled.length]; // Next in loop
+
+      // Make sure no one is assigned to themselves
+      if (assignedTo === participant.serialNumber) {
+        // Swap with next
+        const nextIndex = (i + 2) % shuffled.length;
+        [shuffled[(i + 1) % shuffled.length], shuffled[nextIndex]] =
+          [shuffled[nextIndex], shuffled[(i + 1) % shuffled.length]];
+      }
+
+      const finalAssignment = shuffled[(i + 1) % shuffled.length];
 
       await db.orm.public.Participant.where({
         id: participant.id,
       }).update({
-        selectedNumber: newAssignment,
+        selectedNumber: finalAssignment,
         updatedAt: new Date(),
       });
 
-      reassignments.push({
+      const assignedPerson = allParticipants.find(p => p.serialNumber === finalAssignment);
+      assignments.push({
         participant: participant.name,
-        oldNumber: participant.selectedNumber,
-        newNumber: newAssignment,
+        serialNumber: participant.serialNumber,
+        assignedTo: assignedPerson?.name || `#${finalAssignment}`,
+        assignedNumber: finalAssignment,
       });
     }
 
     revalidatePath("/signup");
     revalidatePath("/check-assignment");
+    revalidatePath("/admin");
 
     return {
       success: true,
-      message: "Reassignments completed",
-      count: reassignments.length,
-      details: reassignments,
+      message: "Lottery draw completed successfully!",
+      count: assignments.length,
+      assignments,
     };
   } catch (error) {
-    console.error("Reassignment error:", error);
+    console.error("Lottery draw error:", error);
     return {
       success: false,
-      error: "An error occurred during reassignment",
+      error: "An error occurred during the lottery draw",
     };
   }
 }
@@ -239,6 +243,7 @@ type SignupResult =
 
 /**
  * Sign up a new participant
+ * In lottery mode, selectedNumber is always null - assignments happen after deadline
  */
 export async function signupParticipant(
   name: string,
@@ -300,78 +305,31 @@ export async function signupParticipant(
       };
     }
 
+    // Check for duplicate phone number
+    const allParticipants = await db.orm.public.Participant.all();
+    const existingParticipant = allParticipants.find(
+      (p) => p.phoneNumber === trimmedPhone
+    );
+
+    if (existingParticipant) {
+      return {
+        success: false,
+        error: "This phone number is already registered",
+      };
+    }
+
     // Get current participant count to determine serial number
     const count = await getParticipantCount();
     const newSerialNumber = count + 1;
 
-    // First participant can skip selection (will be assigned later)
-    if (count === 0 && selectedNumber === null) {
-      // This is allowed for first participant
-    } else if (count > 0 && selectedNumber === null) {
-      // For everyone else, selection is required
-      return {
-        success: false,
-        error: "Please select a number to gift to",
-      };
-    }
-
-    // If a number was selected, verify it's available (not already taken)
-    let selectedParticipant = undefined;
-    if (selectedNumber !== null) {
-      // Check if the number is in valid range (1-100)
-      if (selectedNumber < 1 || selectedNumber > 100) {
-        return {
-          success: false,
-          error: "Please select a number between 1 and 100",
-        };
-      }
-
-      // Check if this number has already been selected by someone else
-      const allParticipants = await db.orm.public.Participant.all();
-      const alreadySelected = allParticipants.find(
-        (p) => p.selectedNumber === selectedNumber
-      );
-
-      if (alreadySelected) {
-        // Number already taken - suggest available numbers
-        const availableNumbers = await getAvailableNumbers();
-        const suggestions = availableNumbers.slice(0, 5).map(n => n.serialNumber).join(", ");
-
-        return {
-          success: false,
-          error: `Number ${selectedNumber} has already been selected. Try one of these: ${suggestions}`,
-        };
-      }
-
-      // Get participant details if they exist for this serial number
-      const selectedParticipantData = allParticipants.find(
-        (p) => p.serialNumber === selectedNumber
-      );
-
-      if (selectedParticipantData) {
-        selectedParticipant = {
-          name: selectedParticipantData.name,
-          phoneNumber: selectedParticipantData.phoneNumber,
-          serialNumber: selectedParticipantData.serialNumber,
-        };
-      } else {
-        // Number not yet assigned to anyone - they're claiming it for future
-        selectedParticipant = {
-          name: `Number ${selectedNumber} (not yet registered)`,
-          phoneNumber: "To be determined",
-          serialNumber: selectedNumber,
-        };
-      }
-    }
-
-    // Create the participant
+    // Create the participant with no assignment (lottery assigns later)
     await db.orm.public.Participant.create({
       id: crypto.randomUUID(),
       name: trimmedName,
       phoneNumber: trimmedPhone,
       ...(trimmedLocation && { location: trimmedLocation }),
       serialNumber: newSerialNumber,
-      selectedNumber: selectedNumber,
+      selectedNumber: null, // Always null in lottery mode
       updatedAt: new Date(),
     });
 
@@ -379,7 +337,6 @@ export async function signupParticipant(
     return {
       success: true,
       serialNumber: newSerialNumber,
-      selectedParticipant,
     };
   } catch (error) {
     console.error("Signup error:", error);

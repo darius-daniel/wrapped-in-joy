@@ -3,7 +3,7 @@
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { reassignUnregisteredNumbers } from "@/app/actions";
+import { runLotteryDraw } from "@/app/actions";
 
 export function AdminPanel({
   className,
@@ -12,12 +12,16 @@ export function AdminPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
 
-  const handleReassign = async () => {
+  const handleLotteryDraw = async () => {
+    if (!confirm("Are you sure you want to run the lottery draw? This will assign all participants randomly.")) {
+      return;
+    }
+
     setIsLoading(true);
     setResult(null);
 
     try {
-      const response = await reassignUnregisteredNumbers();
+      const response = await runLotteryDraw();
       setResult(response);
     } catch (err) {
       setResult({
@@ -34,22 +38,22 @@ export function AdminPanel({
       <div className="flex flex-col gap-4">
         <h1 className="text-2xl font-bold text-center">Admin Panel</h1>
         <p className="text-center text-gray-600">
-          Manage gift exchange assignments
+          Manage gift exchange lottery
         </p>
 
         <div className="p-6 rounded-lg border border-gray-200 bg-white">
-          <h2 className="text-lg font-semibold mb-4">Reassign Unregistered Numbers</h2>
+          <h2 className="text-lg font-semibold mb-4">🎰 Run Lottery Draw</h2>
           <p className="text-sm text-gray-600 mb-4">
-            After registration closes, use this to reassign participants who selected 
-            numbers that were never registered to actual participants.
+            After the November 25th deadline, run the lottery to randomly assign all participants to each other. Everyone will be matched in a complete gift exchange loop.
           </p>
 
           <Button
-            onClick={handleReassign}
+            onClick={handleLotteryDraw}
             disabled={isLoading}
             className="w-full"
+            size="lg"
           >
-            {isLoading ? "Processing..." : "Run Reassignment"}
+            {isLoading ? "Processing..." : "🎲 Run Lottery Draw"}
           </Button>
 
           {result && (
@@ -71,26 +75,18 @@ export function AdminPanel({
                 {result.message || result.error}
               </p>
 
-              {result.count > 0 && (
-                <div className="mt-3">
+              {result.count > 0 && result.assignments && (
+                <div className="mt-3 max-h-96 overflow-y-auto">
                   <p className="text-sm font-medium text-green-800 mb-2">
-                    Reassigned {result.count} participant{result.count !== 1 ? "s" : ""}:
+                    Assigned {result.count} participant{result.count !== 1 ? "s" : ""}:
                   </p>
-                  <ul className="text-sm text-green-700 space-y-1">
-                    {result.details?.map((detail: any, index: number) => (
-                      <li key={index}>
-                        <strong>{detail.participant}</strong>: 
-                        #{detail.oldNumber} (unregistered) → #{detail.newNumber} (registered)
-                      </li>
+                  <div className="space-y-1 text-xs text-green-700">
+                    {result.assignments.map((assignment: any, index: number) => (
+                      <div key={index} className="p-2 bg-white rounded border border-green-200">
+                        <strong>#{assignment.serialNumber} {assignment.participant}</strong> → #{assignment.assignedNumber} {assignment.assignedTo}
+                      </div>
                     ))}
-                  </ul>
-                </div>
-              )}
-
-              {result.needReassignment && (
-                <div className="mt-3 text-sm text-red-700">
-                  <p>Need to reassign: {result.needReassignment}</p>
-                  <p>Available slots: {result.available}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -101,17 +97,16 @@ export function AdminPanel({
           <h2 className="text-lg font-semibold mb-4">How It Works</h2>
           <div className="text-sm text-gray-600 space-y-2">
             <p>
-              <strong>Problem:</strong> Participants can select any number 1-100, 
-              even if that person hasn't registered yet.
+              <strong>1. Signup Phase:</strong> Participants register with name, phone, and location. No selection needed.
             </p>
             <p>
-              <strong>Example:</strong> Alice selects #50, but no one ever registers 
-              as #50.
+              <strong>2. Deadline:</strong> Registration closes on November 25th at midnight.
             </p>
             <p>
-              <strong>Solution:</strong> After registration closes, run reassignment 
-              to assign Alice to an actual registered participant who hasn't been 
-              selected yet.
+              <strong>3. Lottery Draw:</strong> Click the button above to randomly assign everyone. Each person will be matched with someone to gift to.
+            </p>
+            <p>
+              <strong>4. Check Assignment:</strong> Participants can then check who they're gifting to on the "/check-assignment" page.
             </p>
           </div>
         </div>
