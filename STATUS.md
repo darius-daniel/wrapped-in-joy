@@ -87,7 +87,7 @@
 
 1. **TypeScript Build Errors**: The build command may show type errors until Prisma contract is regenerated. The dev server should handle this automatically.
 
-2. **Init Script Doesn't Run**: The `init-db.mjs` script has some issues. Use manual SQL for now (see SETUP.md).
+2. **Schema Drift**: The live database is reconciled by the Prisma CLI. After editing `prisma/contract.prisma`, run `pnpm db:update` (applies the diff) then `pnpm contract:emit` (regenerates types). Until you do, ORM queries fail with `column ... does not exist`.
 
 3. **No Error Recovery**: If database connection fails mid-signup, user has to re-enter everything.
 
@@ -125,21 +125,26 @@ PostgreSQL Database
 
 ```
 app/
-  actions.ts          ← Server actions (CRUD operations)
-  page.tsx            ← Home page (redirects to /signup)
-  signup/
-    page.tsx          ← Signup form page
+  page.tsx                ← Home page (signup form)
+  actions.ts              ← Server actions (CRUD operations)
+  admin/
+    page.tsx              ← Organiser dashboard (phases, orphans, draw)
+  check-assignment/
+    page.tsx              ← Look up your assignment / re-pick
 
 components/
-  signup-form.tsx     ← Main form component
-  ui/                 ← shadcn components
+  signup-form.tsx         ← Signup form component
+  check-assignment-form.tsx ← Assignment lookup + re-pick
+  admin-panel.tsx         ← Organiser dashboard
+  countdown-timer.tsx     ← Deadline countdown
+  ui/                     ← shadcn components
+
+lib/
+  exchange.ts             ← Shared deadline / phase clock
 
 prisma/
-  contract.prisma     ← Database schema
-  db.ts              ← Database client
-
-scripts/
-  init-db.mjs        ← DB initialization script
+  contract.prisma         ← Database schema
+  db.ts                   ← Database client (contract-bound)
 ```
 
 ## 🧪 Testing Instructions
@@ -151,7 +156,7 @@ scripts/
 pnpm dev
 
 # 2. Open in browser
-http://localhost:3000/signup
+http://localhost:3000/
 
 # 3. Test first participant
 - Enter: Name = "Alice", Phone = "+234 123"

@@ -2,14 +2,112 @@
 
 import { db } from "@/prisma/db";
 import { revalidatePath } from "next/cache";
+import {
+  GRACE_ENDS,
+  GRACE_HOURS,
+  SIGNUP_DEADLINE,
+  exchangePhaseAt,
+  type ExchangePhase,
+} from "@/lib/exchange";
 
-export type AvailableNumber = {
+const MIN_SERIAL = 1;
+const MAX_SERIAL = 100;
+
+export type NumberAvailability = {
   serialNumber: number;
-  name: string;
+  /** Already chosen as someone's gift target. */
+  taken: boolean;
+  /** Name of the participant who owns this serial, if anyone has registered it. */
+  ownerName: string | null;
 };
 
+export type DrawAssignment = {
+  participant: string;
+  serialNumber: number;
+  assignedTo: string;
+  assignedNumber: number;
+};
+
+export type DrawResult =
+  | {
+      success: true;
+      message: string;
+      count: number;
+      honored: number;
+      repaired: number;
+      assignments: DrawAssignment[];
+    }
+  | { success: false; error: string };
+
+// ---------------------------------------------------------------------------
+// Pure helpers
+// ---------------------------------------------------------------------------
+
+function shuffle<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/** A permutation of `serials` in which no element keeps its original position. */
+function randomDerangement(serials: number[]): number[] {
+  const n = serials.length;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const pool = shuffle(serials);
+    if (pool.every((value, i) => value !== serials[i])) return pool;
+  }
+  // Rotating by one is always a derangement when n >= 2.
+  return serials.map((_, i) => serials[(i + 1) % n]);
+}
+
+type Matchable = { id: string; serialNumber: number };
+
 /**
- * Check a participant's assignment by phone number
+ * Kuhn's augmenting-path algorithm. Returns a target serial for every entry in
+ * `left`, or null when no perfect matching exists. A participant can never be
+ * matched to their own serial.
+ */
+function matchTargets(
+  left: Matchable[],
+  targets: number[]
+): Map<string, number> | null {
+  const takenBy = new Array<number>(targets.length).fill(-1);
+  const visited = new Array<boolean>(targets.length).fill(false);
+
+  const augment = (li: number): boolean => {
+    for (let ti = 0; ti < targets.length; ti++) {
+      if (visited[ti] || targets[ti] === left[li].serialNumber) continue;
+      visited[ti] = true;
+      if (takenBy[ti] === -1 || augment(takenBy[ti])) {
+        takenBy[ti] = li;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (let li = 0; li < left.length; li++) {
+    visited.fill(false);
+    if (!augment(li)) return null;
+  }
+
+  const result = new Map<string, number>();
+  for (let ti = 0; ti < targets.length; ti++) {
+    const li = takenBy[ti];
+    if (li !== -1) result.set(left[li].id, targets[ti]);
+  }
+  return result.size === left.length ? result : null;
+}
+
+// ---------------------------------------------------------------------------
+// Reads
+// ---------------------------------------------------------------------------
+
+/**
+ * Check a participant's assignment by phone number.
  */
 export async function checkAssignment(phoneNumber: string): Promise<
   | {
@@ -27,6 +125,9 @@ export async function checkAssignment(phoneNumber: string): Promise<
         location?: string;
       } | null;
       message?: string;
+      phase: ExchangePhase;
+      /** True when this participant's pick is unclaimed and may be changed now. */
+      canRepick: boolean;
     }
   | { success: false; error: string }
 > {
@@ -37,7 +138,6 @@ export async function checkAssignment(phoneNumber: string): Promise<
       return { success: false, error: "Phone number is required" };
     }
 
-    // Find participant by phone number
     const allParticipants = await db.orm.public.Participant.all();
     const participant = allParticipants.find(
       (p) => p.phoneNumber === trimmedPhone
@@ -50,47 +150,63 @@ export async function checkAssignment(phoneNumber: string): Promise<
       };
     }
 
-    // If they haven't been assigned yet (first participant before second signs up)
+    const me = {
+      name: participant.name,
+      serialNumber: participant.serialNumber,
+      phoneNumber: participant.phoneNumber,
+      location: participant.location || undefined,
+    };
+
+    const phase = exchangePhaseAt();
+
+    // No pick yet (blank pick, resolved by the draw after the deadline).
     if (participant.selectedNumber === null) {
       return {
         success: true,
-        participant: {
-          name: participant.name,
-          serialNumber: participant.serialNumber,
-          phoneNumber: participant.phoneNumber,
-          location: participant.location || undefined,
-        },
+        participant: me,
         assignedTo: null,
-        message: "You'll be notified once you're assigned to someone!",
+        phase,
+        canRepick: false,
+        message:
+          "You let the draw decide. Your giftee will be revealed once the draw is run after the deadline.",
       };
     }
 
-    // Find who they're assigned to
     const assignedTo = allParticipants.find(
       (p) => p.serialNumber === participant.selectedNumber
     );
 
+    // Pick points at a serial nobody registered (orphan pick). The re-pick
+    // window gives the picker a chance to choose again before the draw.
     if (!assignedTo) {
+      const orphanPhaseMessage =
+        phase === "signup"
+          ? `You chose to gift serial #${participant.selectedNumber}, which isn't registered yet. If nobody claims it by the deadline, you'll be able to pick a new serial then.`
+          : phase === "grace"
+            ? `Serial #${participant.selectedNumber} was never claimed. The re-pick window is open, so you can choose a new serial below.`
+            : `Serial #${participant.selectedNumber} was never claimed. The re-pick window has closed, so the draw will assign you a new match.`;
+
       return {
-        success: false,
-        error: "Assignment data incomplete. Please contact the organizer.",
+        success: true,
+        participant: me,
+        assignedTo: null,
+        phase,
+        canRepick: phase === "grace",
+        message: orphanPhaseMessage,
       };
     }
 
     return {
       success: true,
-      participant: {
-        name: participant.name,
-        serialNumber: participant.serialNumber,
-        phoneNumber: participant.phoneNumber,
-        location: participant.location || undefined,
-      },
+      participant: me,
       assignedTo: {
         name: assignedTo.name,
         serialNumber: assignedTo.serialNumber,
         phoneNumber: assignedTo.phoneNumber,
         location: assignedTo.location || undefined,
       },
+      phase,
+      canRepick: false,
     };
   } catch (error) {
     console.error("Check assignment error:", error);
@@ -102,148 +218,108 @@ export async function checkAssignment(phoneNumber: string): Promise<
 }
 
 /**
- * Get all available numbers (1-100) that haven't been selected yet
+ * Availability for every serial number in the pool, used to render the picker.
  */
-export async function getAvailableNumbers(): Promise<AvailableNumber[]> {
-  // Get all participants
+export async function getNumberOptions(): Promise<NumberAvailability[]> {
   const allParticipants = await db.orm.public.Participant.all();
 
-  // Get all selected numbers (numbers that have been claimed)
-  const selectedNumbers = new Set(
+  const takenNumbers = new Set(
     allParticipants
       .map((p) => p.selectedNumber)
       .filter((n): n is number => n !== null)
   );
+  const nameBySerial = new Map(
+    allParticipants.map((p) => [p.serialNumber, p.name])
+  );
 
-  // Create array of numbers 1-100 that haven't been selected
-  const availableNumbers: AvailableNumber[] = [];
-
-  for (let i = 1; i <= 100; i++) {
-    if (!selectedNumbers.has(i)) {
-      // Check if this serial number has a participant registered
-      const participant = allParticipants.find((p) => p.serialNumber === i);
-
-      availableNumbers.push({
-        serialNumber: i,
-        name: participant ? participant.name : `Number ${i} (not yet registered)`,
-      });
-    }
+  const options: NumberAvailability[] = [];
+  for (let i = MIN_SERIAL; i <= MAX_SERIAL; i++) {
+    options.push({
+      serialNumber: i,
+      taken: takenNumbers.has(i),
+      ownerName: nameBySerial.get(i) ?? null,
+    });
   }
-
-  return availableNumbers.sort((a, b) => a.serialNumber - b.serialNumber);
+  return options;
 }
 
-/**
- * Admin function: Run the lottery draw to randomly assign participants
- * Call this after the signup deadline
- */
-export async function runLotteryDraw() {
-  try {
-    const allParticipants = await db.orm.public.Participant.all();
-
-    if (allParticipants.length < 2) {
-      return {
-        success: false,
-        error: "Need at least 2 participants to run the lottery",
-      };
-    }
-
-    // Get participants without assignments
-    const unassigned = allParticipants.filter(p => p.selectedNumber === null);
-
-    if (unassigned.length === 0) {
-      return {
-        success: true,
-        message: "All participants already have assignments",
-        count: 0,
-      };
-    }
-
-    // Create a pool of all serial numbers
-    const allSerialNumbers = allParticipants.map(p => p.serialNumber);
-
-    // Fisher-Yates shuffle for random assignment
-    const shuffled = [...allSerialNumbers];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    // Assign each participant to the next one in the shuffled array
-    // This creates a single loop where everyone gifts to someone
-    const assignments = [];
-    for (let i = 0; i < allParticipants.length; i++) {
-      const participant = allParticipants[i];
-      const assignedTo = shuffled[(i + 1) % shuffled.length]; // Next in loop
-
-      // Make sure no one is assigned to themselves
-      if (assignedTo === participant.serialNumber) {
-        // Swap with next
-        const nextIndex = (i + 2) % shuffled.length;
-        [shuffled[(i + 1) % shuffled.length], shuffled[nextIndex]] =
-          [shuffled[nextIndex], shuffled[(i + 1) % shuffled.length]];
-      }
-
-      const finalAssignment = shuffled[(i + 1) % shuffled.length];
-
-      await db.orm.public.Participant.where({
-        id: participant.id,
-      }).update({
-        selectedNumber: finalAssignment,
-        updatedAt: new Date(),
-      });
-
-      const assignedPerson = allParticipants.find(p => p.serialNumber === finalAssignment);
-      assignments.push({
-        participant: participant.name,
-        serialNumber: participant.serialNumber,
-        assignedTo: assignedPerson?.name || `#${finalAssignment}`,
-        assignedNumber: finalAssignment,
-      });
-    }
-
-    revalidatePath("/signup");
-    revalidatePath("/check-assignment");
-    revalidatePath("/admin");
-
-    return {
-      success: true,
-      message: "Lottery draw completed successfully!",
-      count: assignments.length,
-      assignments,
-    };
-  } catch (error) {
-    console.error("Lottery draw error:", error);
-    return {
-      success: false,
-      error: "An error occurred during the lottery draw",
-    };
-  }
-}
+export type ExchangeStatus = {
+  phase: ExchangePhase;
+  deadlineISO: string;
+  graceEndsISO: string;
+  graceHours: number;
+  participantCount: number;
+  orphanCount: number;
+};
 
 /**
- * Get the total count of participants
+ * Current phase of the exchange plus the counts the UI needs to gate itself.
  */
-export async function getParticipantCount(): Promise<number> {
+export async function getExchangeStatus(): Promise<ExchangeStatus> {
   const allParticipants = await db.orm.public.Participant.all();
-  return allParticipants.length;
+  const registered = new Set(allParticipants.map((p) => p.serialNumber));
+  const orphanCount = allParticipants.filter(
+    (p) => p.selectedNumber !== null && !registered.has(p.selectedNumber)
+  ).length;
+
+  return {
+    phase: exchangePhaseAt(),
+    deadlineISO: SIGNUP_DEADLINE.toISOString(),
+    graceEndsISO: GRACE_ENDS.toISOString(),
+    graceHours: GRACE_HOURS,
+    participantCount: allParticipants.length,
+    orphanCount,
+  };
 }
+
+export type OrphanedPicker = {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  serialNumber: number;
+  /** The serial they picked, which no registered participant owns. */
+  selectedNumber: number;
+};
+
+/**
+ * Participants whose pick points at a serial nobody registered. These are the
+ * people the admin needs to reach during the re-pick window.
+ */
+export async function getOrphanedPickers(): Promise<OrphanedPicker[]> {
+  const allParticipants = await db.orm.public.Participant.all();
+  const registered = new Set(allParticipants.map((p) => p.serialNumber));
+
+  return allParticipants
+    .filter(
+      (p): p is typeof p & { selectedNumber: number } =>
+        p.selectedNumber !== null && !registered.has(p.selectedNumber)
+    )
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      phoneNumber: p.phoneNumber,
+      serialNumber: p.serialNumber,
+      selectedNumber: p.selectedNumber,
+    }))
+    .sort((a, b) => a.selectedNumber - b.selectedNumber);
+}
+
+// ---------------------------------------------------------------------------
+// Writes
+// ---------------------------------------------------------------------------
 
 type SignupResult =
   | {
       success: true;
       serialNumber: number;
-      selectedParticipant?: {
-        name: string;
-        phoneNumber: string;
-        serialNumber: number;
-      };
+      selectedNumber: number | null;
     }
   | { success: false; error: string };
 
 /**
- * Sign up a new participant
- * In lottery mode, selectedNumber is always null - assignments happen after deadline
+ * Sign up a new participant. `selectedNumber` is the serial number they want to
+ * gift to; it may point at a serial nobody has registered yet (an orphan pick),
+ * which the draw repairs after the deadline. Pass `null` to let the draw decide.
  */
 export async function signupParticipant(
   name: string,
@@ -252,6 +328,13 @@ export async function signupParticipant(
   selectedNumber: number | null
 ): Promise<SignupResult> {
   try {
+    if (exchangePhaseAt() !== "signup") {
+      return {
+        success: false,
+        error: "Registration is closed. The signup deadline has passed.",
+      };
+    }
+
     // Validate name
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -263,9 +346,11 @@ export async function signupParticipant(
     if (trimmedName.length > 100) {
       return { success: false, error: "Name is too long (max 100 characters)" };
     }
-    // Check for valid name characters (letters, spaces, hyphens, apostrophes)
     if (!/^[a-zA-Z\s\-'\.]+$/.test(trimmedName)) {
-      return { success: false, error: "Name can only contain letters, spaces, hyphens, and apostrophes" };
+      return {
+        success: false,
+        error: "Name can only contain letters, spaces, hyphens, and apostrophes",
+      };
     }
 
     // Validate location
@@ -285,64 +370,309 @@ export async function signupParticipant(
     if (!trimmedPhone) {
       return { success: false, error: "Phone number is required" };
     }
-
-    // Ensure it starts with +234
-    if (!trimmedPhone.startsWith('+234')) {
-      return {
-        success: false,
-        error: "Phone number must start with +234"
-      };
+    if (!trimmedPhone.startsWith("+234")) {
+      return { success: false, error: "Phone number must start with +234" };
     }
-
-    // Remove +234 prefix and any formatting characters for validation
-    const cleanedPhone = trimmedPhone.substring(4).replace(/[\s\-\(\)\.]/g, '');
-
-    // Check if it contains exactly 10 digits after +234
+    const cleanedPhone = trimmedPhone
+      .substring(4)
+      .replace(/[\s\-\(\)\.]/g, "");
     if (!/^[0-9]{10}$/.test(cleanedPhone)) {
       return {
         success: false,
-        error: "Please enter a valid 10-digit Nigerian phone number"
+        error: "Please enter a valid 10-digit Nigerian phone number",
       };
     }
+
+    // Validate the gift pick, if one was made
+    const chosenNumber = selectedNumber ?? null;
+    if (chosenNumber !== null) {
+      if (
+        !Number.isInteger(chosenNumber) ||
+        chosenNumber < MIN_SERIAL ||
+        chosenNumber > MAX_SERIAL
+      ) {
+        return {
+          success: false,
+          error: `Please choose a number between ${MIN_SERIAL} and ${MAX_SERIAL}`,
+        };
+      }
+    }
+
+    const allParticipants = await db.orm.public.Participant.all();
 
     // Check for duplicate phone number
-    const allParticipants = await db.orm.public.Participant.all();
-    const existingParticipant = allParticipants.find(
-      (p) => p.phoneNumber === trimmedPhone
-    );
-
-    if (existingParticipant) {
-      return {
-        success: false,
-        error: "This phone number is already registered",
-      };
+    if (allParticipants.some((p) => p.phoneNumber === trimmedPhone)) {
+      return { success: false, error: "This phone number is already registered" };
     }
 
-    // Get current participant count to determine serial number
-    const count = await getParticipantCount();
-    const newSerialNumber = count + 1;
+    // The new serial number, assigned in registration order.
+    const newSerialNumber = allParticipants.length + 1;
 
-    // Create the participant with no assignment (lottery assigns later)
+    if (chosenNumber !== null) {
+      if (chosenNumber === newSerialNumber) {
+        return {
+          success: false,
+          error: "You can't choose your own serial number",
+        };
+      }
+      if (allParticipants.some((p) => p.selectedNumber === chosenNumber)) {
+        return {
+          success: false,
+          error: `Number #${chosenNumber} has already been taken. Please choose another.`,
+        };
+      }
+    }
+
     await db.orm.public.Participant.create({
       id: crypto.randomUUID(),
       name: trimmedName,
       phoneNumber: trimmedPhone,
       ...(trimmedLocation && { location: trimmedLocation }),
       serialNumber: newSerialNumber,
-      selectedNumber: null, // Always null in lottery mode
+      selectedNumber: chosenNumber,
       updatedAt: new Date(),
     });
 
-    revalidatePath("/signup");
+    revalidatePath("/");
     return {
       success: true,
       serialNumber: newSerialNumber,
+      selectedNumber: chosenNumber,
     };
   } catch (error) {
     console.error("Signup error:", error);
+    const message = error instanceof Error ? error.message : "";
+    if (/selectedNumber|unique/i.test(message)) {
+      return {
+        success: false,
+        error: "That number was just taken. Please choose another.",
+      };
+    }
     return {
       success: false,
       error: "An error occurred during signup. Please try again.",
+    };
+  }
+}
+
+export type RepickResult =
+  | { success: true; selectedNumber: number | null }
+  | { success: false; error: string };
+
+/**
+ * Re-pick, available only during the grace window and only to participants
+ * whose current pick points at a serial nobody registered. During this window
+ * signups are frozen, so only serials already registered can be chosen — a
+ * re-pick therefore cannot create a fresh orphan. Pass `null` to let the draw
+ * decide instead.
+ */
+export async function repickTarget(
+  phoneNumber: string,
+  selectedNumber: number | null
+): Promise<RepickResult> {
+  try {
+    if (exchangePhaseAt() !== "grace") {
+      return { success: false, error: "The re-pick window is not open right now." };
+    }
+
+    const trimmedPhone = phoneNumber.trim();
+    if (!trimmedPhone) {
+      return { success: false, error: "Phone number is required" };
+    }
+
+    const allParticipants = await db.orm.public.Participant.all();
+    const participant = allParticipants.find(
+      (p) => p.phoneNumber === trimmedPhone
+    );
+    if (!participant) {
+      return { success: false, error: "No registration found with this phone number" };
+    }
+
+    const registered = new Set(allParticipants.map((p) => p.serialNumber));
+    const currentIsOrphan =
+      participant.selectedNumber !== null &&
+      !registered.has(participant.selectedNumber);
+    if (!currentIsOrphan) {
+      return {
+        success: false,
+        error:
+          "Your current pick is valid, so there is nothing to re-pick. Only unclaimed picks can be changed here.",
+      };
+    }
+
+    const chosen = selectedNumber ?? null;
+    if (chosen !== null) {
+      if (!Number.isInteger(chosen) || chosen < MIN_SERIAL || chosen > MAX_SERIAL) {
+        return {
+          success: false,
+          error: `Please choose a number between ${MIN_SERIAL} and ${MAX_SERIAL}`,
+        };
+      }
+      if (!registered.has(chosen)) {
+        return {
+          success: false,
+          error: `Serial #${chosen} was never claimed, so it can't be picked anymore. Choose a serial someone registered.`,
+        };
+      }
+      if (chosen === participant.serialNumber) {
+        return { success: false, error: "You can't choose your own serial number" };
+      }
+      if (
+        allParticipants.some(
+          (p) => p.id !== participant.id && p.selectedNumber === chosen
+        )
+      ) {
+        return {
+          success: false,
+          error: `Number #${chosen} has already been taken. Please choose another.`,
+        };
+      }
+    }
+
+    await db.orm.public.Participant.where({ id: participant.id }).update({
+      selectedNumber: chosen,
+      updatedAt: new Date(),
+    });
+
+    revalidatePath("/");
+    revalidatePath("/check-assignment");
+    revalidatePath("/admin");
+
+    return { success: true, selectedNumber: chosen };
+  } catch (error) {
+    console.error("Re-pick error:", error);
+    const message = error instanceof Error ? error.message : "";
+    if (/selectedNumber|unique/i.test(message)) {
+      return {
+        success: false,
+        error: "That number was just taken. Please choose another.",
+      };
+    }
+    return { success: false, error: "An error occurred. Please try again." };
+  }
+}
+
+/**
+ * Admin function: resolve gift assignments after the deadline.
+ *
+ * Participants who picked a valid serial keep it. Picks that point at a serial
+ * nobody registered (orphan picks), at themselves, or at a number someone else
+ * already holds are repaired by the draw. Everyone else is matched so that the
+ * whole pool forms a single loop where each serial is gifted exactly once.
+ */
+export async function runLotteryDraw(): Promise<DrawResult> {
+  try {
+    const participants = await db.orm.public.Participant.all();
+
+    if (participants.length < 2) {
+      return {
+        success: false,
+        error: "Need at least 2 participants to run the lottery",
+      };
+    }
+
+    const ordered = [...participants].sort(
+      (a, b) => a.serialNumber - b.serialNumber
+    );
+    const serialSet = new Set(ordered.map((p) => p.serialNumber));
+    const bySerial = new Map(ordered.map((p) => [p.serialNumber, p]));
+
+    // 1. Keep every pick that is valid and still free.
+    const usedTargets = new Set<number>();
+    const finalAssignments = new Map<string, number>();
+    const honoredIds = new Set<string>();
+
+    for (const p of ordered) {
+      const pick = p.selectedNumber;
+      if (
+        pick !== null &&
+        serialSet.has(pick) &&
+        pick !== p.serialNumber &&
+        !usedTargets.has(pick)
+      ) {
+        usedTargets.add(pick);
+        finalAssignments.set(p.id, pick);
+        honoredIds.add(p.id);
+      }
+    }
+
+    // 2. Match the rest against the serials nobody has claimed yet.
+    const unassigned = ordered.filter((p) => !finalAssignments.has(p.id));
+    const freeTargets = ordered
+      .map((p) => p.serialNumber)
+      .filter((s) => !usedTargets.has(s));
+
+    const matched = matchTargets(unassigned, freeTargets);
+
+    let usedFallback = false;
+    if (matched) {
+      for (const [id, target] of matched) finalAssignments.set(id, target);
+    } else {
+      // Keeping every pick makes a complete loop impossible; fall back to a
+      // fresh random loop for everyone.
+      usedFallback = true;
+      finalAssignments.clear();
+      honoredIds.clear();
+      const deranged = randomDerangement(ordered.map((p) => p.serialNumber));
+      ordered.forEach((p, i) => finalAssignments.set(p.id, deranged[i]));
+    }
+
+    // 3. Persist. Clear first so the unique index never collides mid-update.
+    const now = new Date();
+    await db.transaction(async (tx) => {
+      for (const p of ordered) {
+        if (p.selectedNumber !== null) {
+          await tx.orm.public.Participant.where({ id: p.id }).update({
+            selectedNumber: null,
+            updatedAt: now,
+          });
+        }
+      }
+      for (const p of ordered) {
+        await tx.orm.public.Participant.where({ id: p.id }).update({
+          selectedNumber: finalAssignments.get(p.id)!,
+          updatedAt: now,
+        });
+      }
+    });
+
+    const honored = ordered.filter((p) => honoredIds.has(p.id)).length;
+    const repaired = ordered.filter(
+      (p) => p.selectedNumber !== null && !honoredIds.has(p.id)
+    ).length;
+    const assignedByDraw = ordered.length - honored - repaired;
+
+    const assignments: DrawAssignment[] = ordered.map((p) => {
+      const target = finalAssignments.get(p.id)!;
+      return {
+        participant: p.name,
+        serialNumber: p.serialNumber,
+        assignedTo: bySerial.get(target)?.name ?? `#${target}`,
+        assignedNumber: target,
+      };
+    });
+
+    revalidatePath("/");
+    revalidatePath("/check-assignment");
+    revalidatePath("/admin");
+
+    const message = usedFallback
+      ? `Draw complete. The picks made a full loop impossible, so everyone was assigned randomly (${ordered.length} participants).`
+      : `Draw complete. ${honored} pick${honored === 1 ? "" : "s"} honored, ${repaired} orphan pick${repaired === 1 ? "" : "s"} repaired, ${assignedByDraw} assigned by draw.`;
+
+    return {
+      success: true,
+      message,
+      count: assignments.length,
+      honored,
+      repaired,
+      assignments,
+    };
+  } catch (error) {
+    console.error("Lottery draw error:", error);
+    return {
+      success: false,
+      error: "An error occurred during the lottery draw",
     };
   }
 }

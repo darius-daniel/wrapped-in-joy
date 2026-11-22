@@ -92,6 +92,6 @@ WHERE "serialNumber" NOT IN (
 
 ## URLs
 
-- Main signup: http://localhost:3000 or http://localhost:3000/signup
+- Signup: http://localhost:3000/
 - Check assignment: http://localhost:3000/check-assignment
-- Test page: http://localhost:3000/test
+- Admin: http://localhost:3000/admin

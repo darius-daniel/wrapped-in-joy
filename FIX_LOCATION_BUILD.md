@@ -14,21 +14,24 @@ Follow these steps in order:
 
 You have two options:
 
-#### Option A: Using your database admin panel (Recommended)
+#### Option A: Using your database admin panel
 
 Go to your Prisma database dashboard (db.prisma.io) and run this SQL:
 
 ```sql
 ALTER TABLE "Participant" 
-ADD COLUMN IF NOT EXISTS "location" TEXT NOT NULL DEFAULT '';
+ADD COLUMN IF NOT EXISTS "location" TEXT;
 ```
 
-#### Option B: Using the migration script
+#### Option B: Using the Prisma CLI (Recommended)
 
-Run:
+Let the CLI reconcile the live schema against the contract:
+
 ```bash
-node scripts/migrate-add-location.mjs
+pnpm db:update
 ```
+
+It prints the planned operations, then applies them. Review the plan before confirming — it should only contain additive changes for `Participant`.
 
 ### Step 2: Regenerate Prisma Contract Types
 
@@ -97,13 +100,17 @@ If it returns no rows, the column doesn't exist yet.
 
 ## Fresh Install
 
-If you're setting up a new database from scratch, use the updated `init-database.sql`:
+If you're setting up a new database from scratch, let the Prisma CLI create the schema from the contract:
 
 ```bash
-psql "$DATABASE_URL" -f init-database.sql
+pnpm db:init
 ```
 
-This already includes the location field.
+Then verify the deployed schema matches the contract:
+
+```bash
+pnpm exec prisma db verify
+```
 
 ---
 

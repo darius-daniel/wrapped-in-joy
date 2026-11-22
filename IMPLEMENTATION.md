@@ -39,22 +39,24 @@ I've implemented a full-featured Christmas gift exchange signup system with the 
 ### New Files Created
 
 1. **`app/actions.ts`** - Server Actions
-   - `getAvailableNumbers()`: Returns participants who haven't been selected
-   - `getParticipantCount()`: Returns total participant count
-   - `signupParticipant()`: Creates new participant with validation
+   - `getNumberOptions()`: Available serials, each with its owner's name and a taken flag
+   - `getExchangeStatus()`: Phase (`signup`/`grace`/`closed`), deadline + grace timestamps, participant and orphan counts
+   - `getOrphanedPickers()`: Participants whose chosen serial was never claimed
+   - `signupParticipant()`: Creates a new participant with validation
+   - `checkAssignment()`: Looks up a participant's assignment by phone number
+   - `repickTarget()`: Lets an orphaned picker choose a new serial during the grace window
+   - `runLotteryDraw()`: Assigns every participant a match, filling any gaps
 
-2. **`scripts/init-db.mjs`** - Database initialization script
-   - Creates Participant table
-   - Creates necessary indexes
-   - Can be run with `pnpm db:init`
+2. **Database schema** - Managed by the Prisma CLI
+   - `pnpm db:init` creates the schema from `prisma/contract.prisma`
+   - `pnpm db:update` reconciles an existing database to the contract
+   - `pnpm contract:emit` regenerates the TypeScript types
 
-3. **`scripts/init-db-simple.mjs`** - Simple database check script
+3. **`lib/exchange.ts`** - Shared deadline and phase clock (`signup` → `grace` → `closed`)
 
 4. **`SETUP.md`** - Comprehensive setup instructions
 
 5. **`IMPLEMENTATION.md`** - This file
-
-6. **`app/test/page.tsx`** - Simple test page
 
 ### Modified Files
 
@@ -80,6 +82,7 @@ CREATE TABLE "Participant" (
   "id" TEXT PRIMARY KEY,
   "name" TEXT NOT NULL,
   "phoneNumber" TEXT NOT NULL,
+  "location" TEXT,
   "serialNumber" INTEGER NOT NULL UNIQUE,
   "selectedNumber" INTEGER UNIQUE,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -171,20 +174,21 @@ pnpm dev
 ### 4. Test the Application
 
 Navigate to:
-- Main form: http://localhost:3000 or http://localhost:3000/signup
-- Test page: http://localhost:3000/test
+- Signup form: http://localhost:3000/
+- Check assignment: http://localhost:3000/check-assignment
+- Admin dashboard: http://localhost:3000/admin
 
 ## Testing Scenarios
 
 ### Scenario 1: First Participant
-1. Visit /signup
+1. Visit /
 2. Enter name and phone
 3. Notice there's no "Who will you gift to?" field
 4. Submit
 5. Should see success message
 
 ### Scenario 2: Second Participant
-1. Visit /signup (or click "Register Another Person")
+1. Visit / (or click "Register Another Person")
 2. Enter name and phone
 3. Should see dropdown with first participant
 4. Select them

@@ -53,9 +53,12 @@ Type 'PostgresClient<...>' has no call signatures.
 ```
 
 **Fix Applied:**
-Deleted the problematic `scripts/init-db.ts` file. We have alternatives:
-- `scripts/init-db.mjs` - JavaScript version
-- `init-database.sql` - Pure SQL version
+The hand-written scripts all connected with a `postgres(...)` form this Prisma version rejects (`Cannot destructure property 'storage' of 'contract' as it is undefined`). They have since been removed in favour of the Prisma CLI:
+
+| Task | Command |
+| --- | --- |
+| Bootstrap a new database from the contract | `pnpm db:init` |
+| Reconcile an existing database with the contract | `pnpm db:update` |
 
 ## How to Build
 
@@ -81,14 +84,14 @@ The dev server should start successfully and compile pages as you visit them.
 
 1. ✅ `components/check-assignment-form.tsx` - Fixed type guards
 2. ✅ `app/actions.ts` - Added explicit return type
-3. ✅ `scripts/init-db.ts` - Deleted (use .mjs or .sql instead)
+3. ✅ `scripts/init-db.ts` - Deleted; the replacement `.mjs` scripts were later removed too (use `pnpm db:init` / `pnpm db:update`)
 
 ## Testing
 
 Once the server is running, test these pages:
 
-1. **Signup:** http://localhost:3000/signup
+1. **Signup:** http://localhost:3000/ (the signup form is the home page)
 2. **Check Assignment:** http://localhost:3000/check-assignment
-3. **Test Page:** http://localhost:3000/test
+3. **Admin:** http://localhost:3000/admin
 
 All TypeScript errors should be resolved.

@@ -9,9 +9,20 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
-import { checkAssignment } from "@/app/actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useEffect, useState } from "react";
+import { checkAssignment, getNumberOptions, repickTarget } from "@/app/actions";
+import type { NumberAvailability } from "@/app/actions";
+import type { ExchangePhase } from "@/lib/exchange";
 import Link from "next/link";
+
+const NO_PICK = "none";
 
 export function CheckAssignmentForm({
   className,
@@ -34,7 +45,49 @@ export function CheckAssignmentForm({
       location?: string;
     } | null;
     message?: string;
+    phase: ExchangePhase;
+    canRepick: boolean;
   } | null>(null);
+
+  const [options, setOptions] = useState<NumberAvailability[]>([]);
+  const [newPick, setNewPick] = useState<string>(NO_PICK);
+  const [repickError, setRepickError] = useState<string | null>(null);
+  const [isRepicking, setIsRepicking] = useState(false);
+
+  // Load the serials open to a re-pick once we know the caller needs one.
+  useEffect(() => {
+    if (!result?.canRepick) return;
+    let active = true;
+
+    async function loadOptions() {
+      try {
+        const loaded = await getNumberOptions();
+        if (!active) return;
+        setOptions(loaded);
+        setRepickError(null);
+      } catch {
+        if (!active) return;
+        setRepickError(
+          "Couldn't load the available serials. Please refresh the page and try again."
+        );
+      }
+    }
+
+    loadOptions();
+    return () => {
+      active = false;
+    };
+  }, [result?.canRepick]);
+
+  // Serials someone registered that nobody has claimed yet (and not their own).
+  const repickOptions = result
+    ? options.filter(
+        (option) =>
+          option.ownerName !== null &&
+          !option.taken &&
+          option.serialNumber !== result.participant.serialNumber
+      )
+    : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +106,8 @@ export function CheckAssignmentForm({
           participant: response.participant,
           assignedTo: response.assignedTo || null,
           message: response.message,
+          phase: response.phase,
+          canRepick: response.canRepick,
         });
       } else if (!response.success && 'error' in response) {
         setError(response.error);
@@ -64,10 +119,47 @@ export function CheckAssignmentForm({
     }
   };
 
+  const handleRepick = async () => {
+    if (!result) return;
+    setIsRepicking(true);
+    setRepickError(null);
+
+    try {
+      const response = await repickTarget(
+        result.participant.phoneNumber,
+        newPick === NO_PICK ? null : Number(newPick)
+      );
+
+      if (!response.success) {
+        setRepickError(response.error);
+        return;
+      }
+
+      // Re-read so the view reflects the new pick (or the draw-decides state).
+      const refreshed = await checkAssignment(result.participant.phoneNumber);
+      if (refreshed.success && "participant" in refreshed) {
+        setResult({
+          participant: refreshed.participant,
+          assignedTo: refreshed.assignedTo || null,
+          message: refreshed.message,
+          phase: refreshed.phase,
+          canRepick: refreshed.canRepick,
+        });
+      }
+    } catch {
+      setRepickError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsRepicking(false);
+    }
+  };
+
   const handleCheckAnother = () => {
     setPhoneNumber("");
     setResult(null);
     setError(null);
+    setNewPick(NO_PICK);
+    setRepickError(null);
+    setOptions([]);
   };
 
   if (result) {
@@ -111,6 +203,73 @@ export function CheckAssignmentForm({
                   <p className="text-sm text-gray-600 mt-2">
                     📞 {result.assignedTo.phoneNumber}
                   </p>
+                </div>
+              </div>
+            ) : result.canRepick ? (
+              <div>
+                <p className="text-sm text-amber-800 text-center">
+                  ⚠️ {result.message}
+                </p>
+
+                <div className="mt-4">
+                  <Field>
+                    <FieldLabel htmlFor="repick">
+                      Choose a new serial to gift
+                    </FieldLabel>
+                    <Select
+                      value={newPick}
+                      onValueChange={(value) =>
+                        setNewPick(value == null ? NO_PICK : String(value))
+                      }
+                      disabled={isRepicking}
+                    >
+                      <SelectTrigger id="repick" className="w-full">
+                        <SelectValue>
+                          {(value: unknown) => {
+                            const v =
+                              typeof value === "string" ? value : NO_PICK;
+                            if (v === NO_PICK) return "Let the draw decide";
+                            const option = repickOptions.find(
+                              (o) => o.serialNumber === Number(v)
+                            );
+                            return option
+                              ? `#${option.serialNumber} · ${option.ownerName}`
+                              : `#${v}`;
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_PICK}>
+                          Let the draw decide
+                        </SelectItem>
+                        {repickOptions.map((option) => (
+                          <SelectItem
+                            key={option.serialNumber}
+                            value={String(option.serialNumber)}
+                          >
+                            #{option.serialNumber} · {option.ownerName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Only serials someone registered and nobody has picked yet
+                      can be chosen. Signups are closed, so unclaimed serials are
+                      no longer available.
+                    </FieldDescription>
+                  </Field>
+
+                  {repickError && (
+                    <p className="text-sm text-red-600 mt-2">{repickError}</p>
+                  )}
+
+                  <Button
+                    onClick={handleRepick}
+                    disabled={isRepicking}
+                    className="w-full mt-4"
+                  >
+                    {isRepicking ? "Saving..." : "Save new pick"}
+                  </Button>
                 </div>
               </div>
             ) : (
