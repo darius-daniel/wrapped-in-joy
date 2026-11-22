@@ -123,16 +123,16 @@ export function SignupForm({
             <FieldDescription>
               Join the gift exchange lottery
             </FieldDescription>
-            
+
             {/* Participant Count */}
             <div className="px-4 py-2 rounded-lg bg-blue-50 border border-blue-200">
               <p className="text-sm font-semibold text-blue-800">
                 {participantCount} {participantCount === 1 ? 'participant' : 'participants'} registered
               </p>
             </div>
-            
+
             {/* Countdown Timer */}
-            <CountdownTimer deadline="2024-11-25T00:00:00" />
+            <CountdownTimer deadline="2026-11-25T00:00:00" />
           </div>
 
           {error && (

@@ -5,7 +5,7 @@ export default function Home() {
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
       <Image
-        className="dark:invert h-[53.5] w-[110px] self-center"
+        className="dark:invert h-[53.5] w-27.5 self-center"
         src="/lightwk_logo_dark.png"
         alt="Next.js logo"
         width={1125}
