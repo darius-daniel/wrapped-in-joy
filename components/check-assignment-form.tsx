@@ -233,7 +233,7 @@ export function CheckAssignmentForm({
                               (o) => o.serialNumber === Number(v)
                             );
                             return option
-                              ? `#${option.serialNumber} · ${option.ownerName}`
+                              ? `#${option.serialNumber}`
                               : `#${v}`;
                           }}
                         </SelectValue>
@@ -247,7 +247,7 @@ export function CheckAssignmentForm({
                             key={option.serialNumber}
                             value={String(option.serialNumber)}
                           >
-                            #{option.serialNumber} · {option.ownerName}
+                            #{option.serialNumber}
                           </SelectItem>
                         ))}
                       </SelectContent>

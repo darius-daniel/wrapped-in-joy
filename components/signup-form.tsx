@@ -91,7 +91,7 @@ export function SignupForm({
       return `#${option.serialNumber} · taken`;
     }
     if (option.ownerName) {
-      return `#${option.serialNumber} · ${option.ownerName}`;
+      return `#${option.serialNumber}`;
     }
     return `#${option.serialNumber} · not yet registered`;
   }
