@@ -11,14 +11,12 @@ import {
 } from "@/lib/exchange";
 
 const MIN_SERIAL = 1;
-const MAX_SERIAL = 100;
+const MAX_SERIAL = 200;
 
 export type NumberAvailability = {
   serialNumber: number;
   /** Already chosen as someone's gift target. */
   taken: boolean;
-  /** Name of the participant who owns this serial, if anyone has registered it. */
-  ownerName: string | null;
 };
 
 export type DrawAssignment = {
@@ -218,7 +216,10 @@ export async function checkAssignment(phoneNumber: string): Promise<
 }
 
 /**
- * Availability for every serial number in the pool, used to render the picker.
+ * Availability for the serial numbers currently in play, used to render the
+ * picker. Only serials a participant has registered are listed — unclaimed
+ * serials are hidden, so the list is just the real targets. Names are never
+ * included, to keep the exchange anonymous.
  */
 export async function getNumberOptions(): Promise<NumberAvailability[]> {
   const allParticipants = await db.orm.public.Participant.all();
@@ -228,19 +229,13 @@ export async function getNumberOptions(): Promise<NumberAvailability[]> {
       .map((p) => p.selectedNumber)
       .filter((n): n is number => n !== null)
   );
-  const nameBySerial = new Map(
-    allParticipants.map((p) => [p.serialNumber, p.name])
-  );
 
-  const options: NumberAvailability[] = [];
-  for (let i = MIN_SERIAL; i <= MAX_SERIAL; i++) {
-    options.push({
-      serialNumber: i,
-      taken: takenNumbers.has(i),
-      ownerName: nameBySerial.get(i) ?? null,
-    });
-  }
-  return options;
+  return allParticipants
+    .map((p) => ({
+      serialNumber: p.serialNumber,
+      taken: takenNumbers.has(p.serialNumber),
+    }))
+    .sort((a, b) => a.serialNumber - b.serialNumber);
 }
 
 export type ExchangeStatus = {

@@ -90,10 +90,7 @@ export function SignupForm({
     if (option.taken) {
       return `#${option.serialNumber} · taken`;
     }
-    if (option.ownerName) {
-      return `#${option.serialNumber}`;
-    }
-    return `#${option.serialNumber} · not yet registered`;
+    return `#${option.serialNumber}`;
   }
 
   function currentSelectionLabel(value: unknown) {
@@ -345,8 +342,7 @@ export function SignupForm({
             </Select>
             <FieldDescription>
               Pick whose serial number you&apos;ll gift. Taken numbers are
-              unavailable; you can also gift a serial that hasn&apos;t signed up
-              yet.
+              unavailable.
             </FieldDescription>
             {selectionTaken && (
               <p className="text-sm text-red-600">

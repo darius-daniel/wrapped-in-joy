@@ -89,7 +89,7 @@ Or just use the dev server - it's production-ready for 200 users! 🚀
 ## Summary
 
 The application is **fully functional** with:
-- ✅ Flexible number selection (1-100)
+- ✅ Flexible number selection (1-200)
 - ✅ Name validation
 - ✅ Phone with +234 prefix
 - ✅ Location field (optional)

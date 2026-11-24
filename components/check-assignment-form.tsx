@@ -83,7 +83,6 @@ export function CheckAssignmentForm({
   const repickOptions = result
     ? options.filter(
         (option) =>
-          option.ownerName !== null &&
           !option.taken &&
           option.serialNumber !== result.participant.serialNumber
       )
