@@ -83,6 +83,7 @@ export function CheckAssignmentForm({
   const repickOptions = result
     ? options.filter(
         (option) =>
+          option.registered &&
           !option.taken &&
           option.serialNumber !== result.participant.serialNumber
       )

@@ -17,6 +17,8 @@ export type NumberAvailability = {
   serialNumber: number;
   /** Already chosen as someone's gift target. */
   taken: boolean;
+  /** Whether a participant has registered this serial. */
+  registered: boolean;
 };
 
 export type DrawAssignment = {
@@ -216,10 +218,8 @@ export async function checkAssignment(phoneNumber: string): Promise<
 }
 
 /**
- * Availability for the serial numbers currently in play, used to render the
- * picker. Only serials a participant has registered are listed — unclaimed
- * serials are hidden, so the list is just the real targets. Names are never
- * included, to keep the exchange anonymous.
+ * Availability for every serial number in the pool, used to render the picker.
+ * Names are never included, to keep the exchange anonymous.
  */
 export async function getNumberOptions(): Promise<NumberAvailability[]> {
   const allParticipants = await db.orm.public.Participant.all();
@@ -229,13 +229,19 @@ export async function getNumberOptions(): Promise<NumberAvailability[]> {
       .map((p) => p.selectedNumber)
       .filter((n): n is number => n !== null)
   );
+  const registeredNumbers = new Set(
+    allParticipants.map((p) => p.serialNumber)
+  );
 
-  return allParticipants
-    .map((p) => ({
-      serialNumber: p.serialNumber,
-      taken: takenNumbers.has(p.serialNumber),
-    }))
-    .sort((a, b) => a.serialNumber - b.serialNumber);
+  const options: NumberAvailability[] = [];
+  for (let i = MIN_SERIAL; i <= MAX_SERIAL; i++) {
+    options.push({
+      serialNumber: i,
+      taken: takenNumbers.has(i),
+      registered: registeredNumbers.has(i),
+    });
+  }
+  return options;
 }
 
 export type ExchangeStatus = {
@@ -297,6 +303,42 @@ export async function getOrphanedPickers(): Promise<OrphanedPicker[]> {
       selectedNumber: p.selectedNumber,
     }))
     .sort((a, b) => a.selectedNumber - b.selectedNumber);
+}
+
+export type RegistrationRow = {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  location: string | null;
+  serialNumber: number;
+  selectedNumber: number | null;
+  /** Name of the registered participant this row is gifting to, if any. */
+  giftsToName: string | null;
+};
+
+/**
+ * Every registration, in serial order, for the organiser's overview table.
+ */
+export async function getRegistrations(): Promise<RegistrationRow[]> {
+  const allParticipants = await db.orm.public.Participant.all();
+  const nameBySerial = new Map(
+    allParticipants.map((p) => [p.serialNumber, p.name])
+  );
+
+  return [...allParticipants]
+    .sort((a, b) => a.serialNumber - b.serialNumber)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      phoneNumber: p.phoneNumber,
+      location: p.location,
+      serialNumber: p.serialNumber,
+      selectedNumber: p.selectedNumber,
+      giftsToName:
+        p.selectedNumber === null
+          ? null
+          : nameBySerial.get(p.selectedNumber) ?? null,
+    }));
 }
 
 // ---------------------------------------------------------------------------

@@ -7,12 +7,14 @@ import Link from "next/link";
 import {
   getExchangeStatus,
   getOrphanedPickers,
+  getRegistrations,
   runLotteryDraw,
 } from "@/app/actions";
 import type {
   DrawResult,
   ExchangeStatus,
   OrphanedPicker,
+  RegistrationRow,
 } from "@/app/actions";
 
 const PHASE_LABEL: Record<ExchangeStatus["phase"], string> = {
@@ -22,11 +24,12 @@ const PHASE_LABEL: Record<ExchangeStatus["phase"], string> = {
 };
 
 async function loadOverview() {
-  const [status, orphans] = await Promise.all([
+  const [status, orphans, registrations] = await Promise.all([
     getExchangeStatus(),
     getOrphanedPickers(),
+    getRegistrations(),
   ]);
-  return { status, orphans };
+  return { status, orphans, registrations };
 }
 
 /**
@@ -58,6 +61,7 @@ export function AdminPanel({
   const [result, setResult] = useState<DrawResult | null>(null);
   const [status, setStatus] = useState<ExchangeStatus | null>(null);
   const [orphans, setOrphans] = useState<OrphanedPicker[]>([]);
+  const [registrations, setRegistrations] = useState<RegistrationRow[]>([]);
 
   // The orphan list only exists after the client-side load, so the server render
   // never contains a wa.me link and reading location here cannot mismatch.
@@ -71,6 +75,7 @@ export function AdminPanel({
       if (!active) return;
       setStatus(overview.status);
       setOrphans(overview.orphans);
+      setRegistrations(overview.registrations);
     }
 
     load();
@@ -97,6 +102,7 @@ export function AdminPanel({
       const overview = await loadOverview();
       setStatus(overview.status);
       setOrphans(overview.orphans);
+      setRegistrations(overview.registrations);
     } catch (err) {
       setResult({
         success: false,
@@ -177,6 +183,64 @@ export function AdminPanel({
             <p className="text-sm text-gray-500 mt-3">
               No unclaimed picks right now.
             </p>
+          )}
+        </div>
+
+        <div className="p-6 rounded-lg border border-gray-200 bg-white">
+          <h2 className="text-lg font-semibold mb-4">
+            📋 Registrations ({registrations.length})
+          </h2>
+
+          {registrations.length === 0 ? (
+            <p className="text-sm text-gray-500">No registrations yet.</p>
+          ) : (
+            <div className="max-h-96 overflow-y-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="border-b border-gray-200 text-xs uppercase text-gray-500">
+                    <th className="py-2 pr-3 font-medium">#</th>
+                    <th className="py-2 pr-3 font-medium">Name</th>
+                    <th className="py-2 pr-3 font-medium">Phone</th>
+                    <th className="py-2 pr-3 font-medium">Location</th>
+                    <th className="py-2 font-medium">Gifts to</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {registrations.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-b border-gray-100 last:border-0"
+                    >
+                      <td className="py-2 pr-3 font-mono text-gray-500">
+                        {row.serialNumber}
+                      </td>
+                      <td className="py-2 pr-3 font-medium text-gray-900">
+                        {row.name}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-gray-600">
+                        {row.phoneNumber}
+                      </td>
+                      <td className="py-2 pr-3 text-gray-600">
+                        {row.location ?? "—"}
+                      </td>
+                      <td className="py-2 text-gray-600">
+                        {row.selectedNumber === null ? (
+                          <span className="text-gray-400">
+                            — draw decides
+                          </span>
+                        ) : row.giftsToName ? (
+                          `#${row.selectedNumber} · ${row.giftsToName}`
+                        ) : (
+                          <span className="text-amber-700">
+                            #{row.selectedNumber} · unclaimed
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
